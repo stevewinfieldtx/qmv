@@ -54,7 +54,13 @@
                                 <option value="hip-hop">Hip Hop</option>
                                 <option value="jazz">Jazz</option>
                                 <option value="classical">Classical</option>
+                                <option value="country">Country</option>
+                                <option value="folk">Folk</option>
+                                <option value="reggae">Reggae</option>
+                                <option value="blues">Blues</option>
+                                <option value="funk">Funk</option>
                                 <option value="lofi">Lo-Fi</option>
+                                <option value="ambient">Ambient</option>
                             </select>
                         </div>
 
@@ -68,7 +74,12 @@
                                 <option value="energetic">Energetic</option>
                                 <option value="melancholic">Melancholic</option>
                                 <option value="happy">Happy</option>
+                                <option value="sad">Sad</option>
+                                <option value="angry">Angry</option>
                                 <option value="peaceful">Peaceful</option>
+                                <option value="dramatic">Dramatic</option>
+                                <option value="mysterious">Mysterious</option>
+                                <option value="romantic">Romantic</option>
                             </select>
                         </div>
 
@@ -89,6 +100,29 @@
                             <label class="block text-sm font-medium mb-2">Duration (seconds)</label>
                             <input type="number" id="duration" name="duration" min="10" max="300" value="60" class="w-full p-3 border rounded-lg">
                         </div>
+
+                        <!-- Energy Level -->
+                        <div>
+                            <label class="block text-sm font-medium mb-2">Energy Level</label>
+                            <select id="energy_level" name="energy_level" class="w-full p-3 border rounded-lg">
+                                <option value="">Select Energy</option>
+                                <option value="low">Low</option>
+                                <option value="medium">Medium</option>
+                                <option value="high">High</option>
+                            </select>
+                        </div>
+
+                        <!-- Vocal Style -->
+                        <div>
+                            <label class="block text-sm font-medium mb-2">Vocal Style</label>
+                            <select id="vocal_style" name="vocal_style" class="w-full p-3 border rounded-lg">
+                                <option value="none">Instrumental</option>
+                                <option value="male">Male Vocals</option>
+                                <option value="female">Female Vocals</option>
+                                <option value="choir">Choir</option>
+                                <option value="rap">Rap</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
 
@@ -106,7 +140,10 @@
                                 <option value="minimal">Minimal</option>
                                 <option value="bold">Bold</option>
                                 <option value="abstract">Abstract</option>
+                                <option value="realistic">Realistic</option>
+                                <option value="cartoon">Cartoon</option>
                                 <option value="futuristic">Futuristic</option>
+                                <option value="retro">Retro</option>
                             </select>
                         </div>
 
@@ -122,6 +159,21 @@
                                 <option value="neon">Neon</option>
                                 <option value="warm">Warm</option>
                                 <option value="cool">Cool</option>
+                                <option value="earth_tones">Earth Tones</option>
+                                <option value="rainbow">Rainbow</option>
+                            </select>
+                        </div>
+
+                        <!-- Animation Style -->
+                        <div>
+                            <label class="block text-sm font-medium mb-2">Animation Style</label>
+                            <select id="animation_style" name="animation_style" class="w-full p-3 border rounded-lg">
+                                <option value="">Select Animation</option>
+                                <option value="smooth">Smooth</option>
+                                <option value="dynamic">Dynamic</option>
+                                <option value="flowing">Flowing</option>
+                                <option value="intense">Intense</option>
+                                <option value="gentle">Gentle</option>
                             </select>
                         </div>
 
@@ -145,6 +197,18 @@
                                 <option value="4:3">4:3 (Traditional)</option>
                             </select>
                         </div>
+
+                        <!-- Transition Style -->
+                        <div>
+                            <label class="block text-sm font-medium mb-2">Transition Style</label>
+                            <select id="transition_style" name="transition_style" class="w-full p-3 border rounded-lg">
+                                <option value="fade">Fade</option>
+                                <option value="cut">Cut</option>
+                                <option value="slide">Slide</option>
+                                <option value="zoom">Zoom</option>
+                                <option value="spin">Spin</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
 
@@ -159,6 +223,32 @@
                         <div>
                             <label class="block text-sm font-medium mb-2">Description</label>
                             <textarea id="description" name="description" rows="3" class="w-full p-3 border rounded-lg" placeholder="Describe your vision..."></textarea>
+                        </div>
+                        
+                        <!-- AI Enhanced Prompts -->
+                        <div>
+                            <label class="block text-sm font-medium mb-2">Video Prompt (AI Enhanced)</label>
+                            <div class="relative">
+                                <textarea id="video_prompt" name="video_prompt" rows="3" class="w-full p-3 border rounded-lg pr-24" placeholder="Describe your video concept..."></textarea>
+                                <div class="absolute right-2 top-2 space-y-1">
+                                    <button type="button" id="enhanceVideoBtn" class="block w-20 text-xs bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600">
+                                        Enhance
+                                    </button>
+                                    <button type="button" id="suggestVideoBtn" class="block w-20 text-xs bg-green-500 text-white px-2 py-1 rounded hover:bg-green-600">
+                                        Suggest
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium mb-2">Music Prompt (AI Enhanced)</label>
+                            <div class="relative">
+                                <textarea id="music_prompt" name="music_prompt" rows="3" class="w-full p-3 border rounded-lg pr-24" placeholder="Describe your music style..."></textarea>
+                                <button type="button" id="enhanceMusicBtn" class="absolute right-2 top-2 text-xs bg-purple-500 text-white px-2 py-1 rounded hover:bg-purple-600">
+                                    Enhance
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -177,6 +267,19 @@
             <div class="bg-white p-8 rounded-lg text-center">
                 <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
                 <p class="text-lg font-semibold">Processing your preferences...</p>
+            </div>
+        </div>
+
+        <!-- AI Suggestions Modal -->
+        <div id="suggestionsModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+            <div class="bg-white p-6 rounded-lg max-w-2xl w-full mx-4 max-h-96 overflow-y-auto">
+                <h3 class="text-lg font-semibold mb-4">AI Suggestions</h3>
+                <div id="suggestionsContent"></div>
+                <div class="mt-4 text-right">
+                    <button id="closeSuggestionsBtn" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">
+                        Close
+                    </button>
+                </div>
             </div>
         </div>
     </div>
