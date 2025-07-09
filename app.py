@@ -1,4 +1,3 @@
-```python
 from flask import Flask, render_template, request, jsonify, session
 from flask_cors import CORS
 import os
@@ -36,7 +35,7 @@ except Exception as e:
     logger.error(f"Redis connection failed: {e}")
     redis_client = None
 
-# Gemini setup with correct model name
+# Gemini setup
 try:
     import google.generativeai as genai
     gemini_api_key = os.environ.get('GEMINI_API_KEY')
@@ -67,7 +66,7 @@ class SessionManager:
     def __init__(self, redis_client):
         self.redis_client = redis_client
         self.session_expiry = 3600  # 1 hour in seconds
-        self.in_memory_store = {}  # Fallback for when Redis is not available
+        self.in_memory_store = {}
     
     def store_preferences(self, session_id: str, preferences: Dict[str, Any]) -> bool:
         """Store user preferences in Redis or memory"""
@@ -119,8 +118,6 @@ class PreferenceValidator:
         self.valid_tempos = ['slow', 'medium', 'fast', 'very_fast']
         self.valid_visual_styles = ['modern', 'vintage', 'minimal', 'bold', 'abstract', 'realistic', 'cartoon', 'futuristic', 'retro']
         self.valid_color_schemes = ['vibrant', 'pastel', 'dark', 'monochrome', 'neon', 'warm', 'cool', 'earth_tones', 'rainbow']
-        self.valid_resolutions = ['720p', '1080p', '4k']
-        self.valid_aspect_ratios = ['16:9', '9:16', '1:1', '4:3']
     
     def validate_preferences(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Validate all user preferences"""
@@ -153,45 +150,30 @@ class PreferenceValidator:
         return {'valid': len(errors) == 0, 'errors': errors}
 
 class PreferenceProcessor:
-    """Process and structure user preferences for music and image generation"""
+    """Process and structure user preferences for music generation"""
     
     def __init__(self):
         self.presets = {
             'energetic_pop': {
                 'genre': 'pop', 'mood': 'upbeat', 'tempo': 'fast', 'energy_level': 'high',
-                'visual_style': 'modern', 'color_scheme': 'vibrant', 'animation_style': 'dynamic'
+                'visual_style': 'modern', 'color_scheme': 'vibrant'
             },
             'chill_lofi': {
                 'genre': 'lofi', 'mood': 'relaxed', 'tempo': 'slow', 'energy_level': 'low',
-                'visual_style': 'minimal', 'color_scheme': 'pastel', 'animation_style': 'smooth'
+                'visual_style': 'minimal', 'color_scheme': 'pastel'
             },
             'rock_anthem': {
                 'genre': 'rock', 'mood': 'powerful', 'tempo': 'fast', 'energy_level': 'high',
-                'visual_style': 'bold', 'color_scheme': 'dark', 'animation_style': 'intense'
+                'visual_style': 'bold', 'color_scheme': 'dark'
             },
             'ambient_electronic': {
                 'genre': 'electronic', 'mood': 'atmospheric', 'tempo': 'medium', 'energy_level': 'medium',
-                'visual_style': 'futuristic', 'color_scheme': 'neon', 'animation_style': 'flowing'
+                'visual_style': 'futuristic', 'color_scheme': 'neon'
             }
         }
     
     def process_preferences(self, raw_data: Dict[str, Any], session_id: str) -> Dict[str, Any]:
         """Process raw user input into structured preferences"""
-        
-        # Calculate image count based on tempo and duration
-        tempo = raw_data.get('tempo', 'medium')
-        duration = int(raw_data.get('duration', 60))
-        
-        # BPM mapping for image generation
-        bpm_mapping = {
-            'slow': 80,      # 1.33 seconds per image
-            'medium': 120,   # 1 second per image  
-            'fast': 160,     # 0.75 seconds per image
-            'very_fast': 200 # 0.6 seconds per image
-        }
-        
-        bpm = bpm_mapping.get(tempo, 120)
-        images_needed = int((duration * bpm) / 60)  # Calculate images needed
         
         return {
             'session_id': session_id,
@@ -199,8 +181,8 @@ class PreferenceProcessor:
             'music_preferences': {
                 'genre': raw_data.get('genre', 'pop'),
                 'mood': raw_data.get('mood', 'upbeat'),
-                'tempo': tempo,
-                'duration': duration,
+                'tempo': raw_data.get('tempo', 'medium'),
+                'duration': int(raw_data.get('duration', 60)),
                 'energy_level': raw_data.get('energy_level', 'medium'),
                 'vocal_style': raw_data.get('vocal_style', 'none'),
                 'music_prompt': raw_data.get('music_prompt', '')
@@ -208,12 +190,7 @@ class PreferenceProcessor:
             'image_preferences': {
                 'visual_style': raw_data.get('visual_style', 'modern'),
                 'color_scheme': raw_data.get('color_scheme', 'vibrant'),
-                'aspect_ratio': raw_data.get('aspect_ratio', '16:9'),
-                'resolution': raw_data.get('resolution', '1080p'),
-                'image_prompt': raw_data.get('image_prompt', ''),
-                'images_needed': images_needed,
-                'bpm': bpm,
-                'seconds_per_image': 60 / bpm
+                'image_prompt': raw_data.get('image_prompt', '')
             },
             'general_preferences': {
                 'project_name': raw_data.get('project_name', ''),
@@ -244,24 +221,21 @@ class GeminiService:
             image_prefs = preferences.get('image_preferences', {})
             
             prompt = f"""
-            You are helping create a realistic image prompt for AI image generation for a music slideshow.
+            Create a realistic image prompt for AI image generation for a music slideshow.
             
-            User's basic idea: "{user_input}"
+            User's idea: "{user_input}"
             
-            Music context:
-            - Genre: {music_prefs.get('genre', 'pop')}
-            - Mood: {music_prefs.get('mood', 'upbeat')}
-            - Style: {image_prefs.get('visual_style', 'modern')}
-            - Colors: {image_prefs.get('color_scheme', 'vibrant')}
+            Music: {music_prefs.get('genre', 'pop')} - {music_prefs.get('mood', 'upbeat')}
+            Style: {image_prefs.get('visual_style', 'modern')}
+            Colors: {image_prefs.get('color_scheme', 'vibrant')}
             
             Create a realistic, specific image prompt that:
             1. Is under 1500 characters
-            2. Describes something that actually exists/could exist
-            3. Is clear and specific for AI image generation
+            2. Describes something real and achievable
+            3. Is clear for AI image generation
             4. Matches the music mood and style
-            5. Avoids overly abstract or impossible concepts
             
-            Focus on real subjects, settings, lighting, and compositions that would work well for a music slideshow.
+            Focus on real subjects, settings, lighting that exist in reality.
             """
             
             response = self.model.generate_content(prompt)
@@ -271,38 +245,15 @@ class GeminiService:
             if len(enhanced_prompt) > 1500:
                 enhanced_prompt = enhanced_prompt[:1497] + "..."
             
-            # Create realistic alternatives
-            alternatives = []
-            alt_concepts = [
-                "a portrait-focused version",
-                "a landscape/environment version", 
-                "a close-up detail version"
-            ]
-            
-            for concept in alt_concepts:
-                alt_prompt = f"""
-                Create {concept} of: "{user_input}"
-                Style: {image_prefs.get('visual_style', 'modern')}
-                Colors: {image_prefs.get('color_scheme', 'vibrant')}
-                Music mood: {music_prefs.get('mood', 'upbeat')}
-                
-                Keep it realistic and under 200 characters.
-                """
-                
-                try:
-                    alt_response = self.model.generate_content(alt_prompt)
-                    alt_text = alt_response.text.strip()
-                    if len(alt_text) > 200:
-                        alt_text = alt_text[:197] + "..."
-                    alternatives.append(alt_text)
-                except:
-                    alternatives.append(f"A {concept} with {image_prefs.get('color_scheme', 'vibrant')} colors and {image_prefs.get('visual_style', 'modern')} style")
-            
             return {
                 'success': True,
                 'enhanced_prompt': enhanced_prompt,
-                'alternatives': alternatives[:3],
-                'technical_notes': f"Will generate {image_prefs.get('images_needed', 60)} image variations for {music_prefs.get('duration', 60)} second slideshow",
+                'alternatives': [
+                    f"Portrait version: {user_input} with {image_prefs.get('color_scheme', 'vibrant')} lighting",
+                    f"Landscape version: {user_input} in {image_prefs.get('visual_style', 'modern')} setting",
+                    f"Close-up version: detailed {user_input} with artistic composition"
+                ],
+                'technical_notes': "Optimized for AI image generation",
                 'original_prompt': user_input,
                 'character_count': len(enhanced_prompt)
             }
@@ -314,129 +265,42 @@ class GeminiService:
     def generate_image_suggestions(self, preferences: Dict[str, Any]) -> Dict[str, Any]:
         """Generate realistic image suggestions based on preferences"""
         try:
-            if not self.model:
-                return self._get_realistic_fallback_suggestions(preferences)
-            
             music_prefs = preferences.get('music_preferences', {})
             image_prefs = preferences.get('image_preferences', {})
             
-            prompt = f"""
-            Create 5 realistic image concepts for a music slideshow with these parameters:
-
-            Music: {music_prefs.get('genre', 'pop')} - {music_prefs.get('mood', 'upbeat')} - {music_prefs.get('tempo', 'medium')} tempo
-            Visual: {image_prefs.get('visual_style', 'modern')} style with {image_prefs.get('color_scheme', 'vibrant')} colors
-            Duration: {music_prefs.get('duration', 60)} seconds ({image_prefs.get('images_needed', 60)} images needed)
-
-            For each concept, provide:
-            1. A clear, descriptive title
-            2. A realistic description (under 300 characters) of what would be shown
-            3. Focus on real subjects, places, and scenarios that exist
-
-            Make them varied but all realistic and suitable for AI image generation.
-            Avoid overly abstract or impossible concepts.
-
-            Format as:
-            1. Title: [Title]
-            Description: [Description]
-
-            2. Title: [Title]
-            Description: [Description]
-
-            [Continue for 5 concepts]
-            """
+            genre = music_prefs.get('genre', 'pop')
+            mood = music_prefs.get('mood', 'upbeat')
+            style = image_prefs.get('visual_style', 'modern')
+            colors = image_prefs.get('color_scheme', 'vibrant')
             
-            response = self.model.generate_content(prompt)
-            suggestions = self._parse_realistic_suggestions(response.text, preferences)
+            suggestions = [
+                {
+                    'title': f'Urban {style.title()} Portrait',
+                    'description': f'A person in {style} clothing against a city backdrop with {colors} lighting. Clean composition with shallow depth of field, perfect for {genre} music.'
+                },
+                {
+                    'title': f'Nature & Music Vibes',
+                    'description': f'Beautiful natural landscape with {colors} sunset colors. {style} composition capturing the {mood} mood through lighting and scenery.'
+                },
+                {
+                    'title': f'Studio Performance Setup',
+                    'description': f'Musical instruments in a {style} studio setting. {colors} stage lighting creates dynamic shadows matching the {genre} energy.'
+                },
+                {
+                    'title': f'City Life Energy',
+                    'description': f'Urban scenes with {colors} neon signs and {style} architecture. Street photography capturing {mood} {genre} music vibes.'
+                },
+                {
+                    'title': f'Artistic Still Life',
+                    'description': f'{style} arrangement of objects with {colors} color palette. Interesting textures and geometric shapes for visual interest.'
+                }
+            ]
             
             return {'success': True, 'suggestions': suggestions}
             
         except Exception as e:
-            logger.error(f"Gemini error: {e}")
-            return self._get_realistic_fallback_suggestions(preferences)
-    
-    def _parse_realistic_suggestions(self, response_text: str, preferences: Dict[str, Any]) -> List[Dict[str, str]]:
-        """Parse Gemini response into realistic suggestions"""
-        suggestions = []
-        lines = response_text.split('\n')
-        
-        current_title = ""
-        current_description = ""
-        
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-                
-            if line.startswith(('1.', '2.', '3.', '4.', '5.')) or line.startswith('Title:'):
-                if current_title and current_description:
-                    # Ensure description is under 300 characters
-                    if len(current_description) > 300:
-                        current_description = current_description[:297] + "..."
-                    
-                    suggestions.append({
-                        'title': current_title,
-                        'description': current_description
-                    })
-                
-                if line.startswith('Title:'):
-                    current_title = line.replace('Title:', '').strip()
-                else:
-                    current_title = line.replace('1.', '').replace('2.', '').replace('3.', '').replace('4.', '').replace('5.', '').replace('Title:', '').strip()
-                current_description = ""
-            elif line.startswith('Description:'):
-                current_description = line.replace('Description:', '').strip()
-            elif current_title and current_description:
-                current_description += " " + line
-        
-        # Add the last suggestion
-        if current_title and current_description:
-            if len(current_description) > 300:
-                current_description = current_description[:297] + "..."
-            suggestions.append({
-                'title': current_title,
-                'description': current_description
-            })
-        
-        # If parsing failed, return realistic fallbacks
-        if not suggestions:
-            return self._get_realistic_fallback_suggestions(preferences)['suggestions']
-        
-        return suggestions[:5]
-    
-    def _get_realistic_fallback_suggestions(self, preferences: Dict[str, Any]) -> Dict[str, Any]:
-        """Provide realistic fallback suggestions"""
-        music_prefs = preferences.get('music_preferences', {})
-        image_prefs = preferences.get('image_preferences', {})
-        
-        genre = music_prefs.get('genre', 'pop')
-        mood = music_prefs.get('mood', 'upbeat')
-        style = image_prefs.get('visual_style', 'modern')
-        colors = image_prefs.get('color_scheme', 'vibrant')
-        
-        suggestions = [
-            {
-                'title': f'Urban {style.title()} Portrait',
-                'description': f'A person in {style} clothing against a city backdrop with {colors} lighting. Clean composition with shallow depth of field, perfect for {genre} music.'
-            },
-            {
-                'title': f'Nature & Music',
-                'description': f'Beautiful natural landscape with {colors} sunset/sunrise colors. {style} composition capturing the {mood} mood through lighting and scenery.'
-            },
-            {
-                'title': f'Studio Performance',
-                'description': f'Musician with instruments in a {style} studio setting. {colors} stage lighting creates dynamic shadows and highlights matching the {genre} vibe.'
-            },
-            {
-                'title': f'City Life Montage',
-                'description': f'Urban scenes with {colors} neon signs and {style} architecture. Street photography style capturing the energy of {mood} {genre} music.'
-            },
-            {
-                'title': f'Abstract Objects',
-                'description': f'{style} still life with everyday objects arranged artistically. {colors} color palette with interesting textures and geometric shapes.'
-            }
-        ]
-        
-        return {'success': True, 'suggestions': suggestions}
+            logger.error(f"Error generating suggestions: {e}")
+            return {'success': False, 'error': str(e)}
 
 # ============== INITIALIZE SERVICES ==============
 
@@ -464,7 +328,7 @@ def health_check():
 
 @app.route('/api/preferences', methods=['POST'])
 def submit_preferences():
-    """Handle user preference submission and trigger Phase 2"""
+    """Handle user preference submission and trigger Phase 2 (Music Generation)"""
     try:
         data = request.get_json()
         
@@ -492,17 +356,16 @@ def submit_preferences():
         
         logger.info(f"Preferences stored for session: {session_id}")
         
-        # Trigger Phase 2 automatically
+        # Trigger Phase 2 (Music Generation)
         if redis_client:
             redis_client.publish('phase1_completed', session_id)
-            logger.info(f"Triggered Phase 2 for session: {session_id}")
+            logger.info(f"Triggered Phase 2 (Music Generation) for session: {session_id}")
         
         return jsonify({
             'success': True,
             'session_id': session_id,
-            'message': 'Preferences saved and Phase 2 triggered',
-            'images_needed': processed_data['image_preferences']['images_needed'],
-            'next_phase': 'music_and_image_creation'
+            'message': 'Preferences saved successfully - Music generation started',
+            'next_phase': 'music_generation'
         })
         
     except Exception as e:
@@ -640,8 +503,10 @@ def enhance_music_prompt():
             else:
                 preferences = session.get(session_id, {})
         
-        # Simple enhancement for music
-        enhanced_prompt = f"Create a {preferences.get('music_preferences', {}).get('genre', 'pop')} song with {preferences.get('music_preferences', {}).get('mood', 'upbeat')} mood. {user_prompt}"
+        music_prefs = preferences.get('music_preferences', {})
+        
+        # Simple music enhancement
+        enhanced_prompt = f"Create a {music_prefs.get('genre', 'pop')} song with {music_prefs.get('mood', 'upbeat')} mood and {music_prefs.get('tempo', 'medium')} tempo. {user_prompt}"
         
         if len(enhanced_prompt) > 500:
             enhanced_prompt = enhanced_prompt[:497] + "..."
@@ -650,11 +515,11 @@ def enhance_music_prompt():
             'success': True,
             'enhanced_prompt': enhanced_prompt,
             'alternatives': [
-                f"Focus on {preferences.get('music_preferences', {}).get('tempo', 'medium')} tempo: {user_prompt}",
-                f"Emphasize {preferences.get('music_preferences', {}).get('energy_level', 'medium')} energy: {user_prompt}",
+                f"Focus on {music_prefs.get('tempo', 'medium')} tempo: {user_prompt}",
+                f"Emphasize {music_prefs.get('energy_level', 'medium')} energy: {user_prompt}",
                 f"Modern production style: {user_prompt}"
             ],
-            'technical_notes': f"Optimized for {preferences.get('music_preferences', {}).get('duration', 60)} second duration",
+            'technical_notes': f"Optimized for {music_prefs.get('duration', 60)} second duration",
             'original_prompt': user_prompt,
             'character_count': len(enhanced_prompt)
         })
@@ -666,7 +531,71 @@ def enhance_music_prompt():
             'error': 'Internal server error'
         }), 500
 
+# Phase 2 Status Routes
+@app.route('/api/phase2/status/<session_id>')
+def get_phase2_status(session_id):
+    """Get Phase 2 processing status"""
+    try:
+        if not redis_client:
+            return jsonify({
+                'success': False,
+                'error': 'Redis not available'
+            }), 500
+            
+        status_key = f"phase2_status:{session_id}"
+        status_data = redis_client.get(status_key)
+        
+        if not status_data:
+            return jsonify({
+                'success': False,
+                'error': 'Status not found'
+            }), 404
+        
+        status = json.loads(status_data)
+        return jsonify({
+            'success': True,
+            'status': status
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting Phase 2 status: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error'
+        }), 500
+
+@app.route('/api/phase2/results/<session_id>')
+def get_phase2_results(session_id):
+    """Get Phase 2 results (generated songs)"""
+    try:
+        if not redis_client:
+            return jsonify({
+                'success': False,
+                'error': 'Redis not available'
+            }), 500
+            
+        results_key = f"phase2_results:{session_id}"
+        results_data = redis_client.get(results_key)
+        
+        if not results_data:
+            return jsonify({
+                'success': False,
+                'error': 'Results not found'
+            }), 404
+        
+        results = json.loads(results_data)
+        return jsonify({
+            'success': True,
+            'results': results
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting Phase 2 results: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error'
+        }), 500
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=os.environ.get('FLASK_ENV') == 'development')
-```
