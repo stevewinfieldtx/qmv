@@ -35,14 +35,23 @@ except Exception as e:
     logger.error(f"Redis connection failed: {e}")
     redis_client = None
 
-# Gemini setup
+# Gemini setup with correct model name
 try:
     import google.generativeai as genai
     gemini_api_key = os.environ.get('GEMINI_API_KEY')
     if gemini_api_key:
         genai.configure(api_key=gemini_api_key)
-        gemini_model = genai.GenerativeModel('gemini-pro')
-        logger.info("Gemini service initialized")
+        # Use the correct model name - try both options
+        try:
+            gemini_model = genai.GenerativeModel('gemini-1.5-flash')
+            logger.info("Gemini service initialized with gemini-1.5-flash")
+        except:
+            try:
+                gemini_model = genai.GenerativeModel('gemini-pro')
+                logger.info("Gemini service initialized with gemini-pro")
+            except:
+                gemini_model = genai.GenerativeModel('models/gemini-pro')
+                logger.info("Gemini service initialized with models/gemini-pro")
     else:
         logger.warning("GEMINI_API_KEY not found, Gemini disabled")
         gemini_model = None
@@ -208,71 +217,198 @@ class GeminiService:
             if not self.model:
                 return {'success': False, 'error': 'Gemini API not configured'}
             
+            # Get context from preferences
+            music_prefs = preferences.get('music_preferences', {})
+            video_prefs = preferences.get('video_preferences', {})
+            
             prompt = f"""
-            Enhance this video prompt for AI generation: "{user_input}"
+            You are a professional video director and creative prompt engineer. Take this user's basic video concept and transform it into a detailed, specific, and visually rich prompt for AI video generation.
+
+            User's input: "{user_input}"
             
-            User preferences:
-            - Genre: {preferences.get('music_preferences', {}).get('genre', 'pop')}
-            - Mood: {preferences.get('music_preferences', {}).get('mood', 'upbeat')}
-            - Visual Style: {preferences.get('video_preferences', {}).get('visual_style', 'modern')}
-            - Colors: {preferences.get('video_preferences', {}).get('color_scheme', 'vibrant')}
-            
-            Provide:
-            1. Enhanced prompt (detailed and creative)
-            2. Three alternative suggestions
-            3. Technical notes
+            Context:
+            - Music Genre: {music_prefs.get('genre', 'pop')}
+            - Music Mood: {music_prefs.get('mood', 'upbeat')}
+            - Music Tempo: {music_prefs.get('tempo', 'medium')}
+            - Visual Style: {video_prefs.get('visual_style', 'modern')}
+            - Color Scheme: {video_prefs.get('color_scheme', 'vibrant')}
+            - Duration: {music_prefs.get('duration', 60)} seconds
+
+            Please create an enhanced video prompt that includes:
+            1. Specific visual scenes and imagery
+            2. Camera movements and angles
+            3. Lighting and atmosphere details
+            4. Color palette specifics
+            5. Scene transitions and pacing
+            6. Visual effects and style elements
+
+            Make it detailed enough that an AI video generator could create something compelling and specific, not generic.
             """
             
             response = self.model.generate_content(prompt)
-            response_text = response.text
+            enhanced_prompt = response.text.strip()
             
-            # Simple parsing
-            lines = response_text.split('\n')
-            enhanced_prompt = lines[0] if lines else user_input
+            # Create alternatives
+            alternatives = []
+            for i in range(3):
+                alt_prompt = f"""
+                Create a different detailed video concept based on: "{user_input}"
+                
+                Style: {video_prefs.get('visual_style', 'modern')}
+                Colors: {video_prefs.get('color_scheme', 'vibrant')}
+                Music: {music_prefs.get('genre', 'pop')} - {music_prefs.get('mood', 'upbeat')}
+                
+                Focus on alternative #{i+1}: Make this concept unique and specific with detailed visual descriptions.
+                """
+                
+                try:
+                    alt_response = self.model.generate_content(alt_prompt)
+                    alternatives.append(alt_response.text.strip())
+                except:
+                    alternatives.append(f"Alternative concept focusing on {video_prefs.get('visual_style', 'modern')} aesthetics with {video_prefs.get('color_scheme', 'vibrant')} color grading")
             
             return {
                 'success': True,
                 'enhanced_prompt': enhanced_prompt,
-                'alternatives': [
-                    "Dynamic camera movements with rhythmic editing",
-                    "Abstract visual metaphors matching the music mood",
-                    "Layered visual effects with synchronized transitions"
-                ],
-                'technical_notes': "AI-enhanced prompt generated for optimal video creation",
+                'alternatives': alternatives[:3],
+                'technical_notes': f"Optimized for {video_prefs.get('resolution', '1080p')} {video_prefs.get('aspect_ratio', '16:9')} video generation with {music_prefs.get('duration', 60)} second duration",
                 'original_prompt': user_input
             }
             
         except Exception as e:
             logger.error(f"Gemini error: {e}")
-            return {'success': False, 'error': str(e)}
+            return {'success': False, 'error': f'Gemini API error: {str(e)}'}
     
     def generate_video_suggestions(self, preferences: Dict[str, Any]) -> Dict[str, Any]:
-        """Generate video suggestions based on preferences"""
+        """Generate detailed video suggestions based on preferences"""
         try:
             if not self.model:
-                return {'success': False, 'error': 'Gemini API not configured'}
+                # Provide detailed fallback suggestions
+                return self._get_detailed_fallback_suggestions(preferences)
             
-            # Fallback suggestions
-            suggestions = [
-                {
-                    'title': 'Dynamic Visual Journey',
-                    'description': f"A {preferences.get('video_preferences', {}).get('visual_style', 'modern')} video with {preferences.get('video_preferences', {}).get('color_scheme', 'vibrant')} colors."
-                },
-                {
-                    'title': 'Rhythmic Patterns',
-                    'description': 'Abstract geometric patterns that pulse with the music beat.'
-                },
-                {
-                    'title': 'Cinematic Flow',
-                    'description': 'Smooth transitions and cinematic movements matching your music style.'
-                }
-            ]
+            music_prefs = preferences.get('music_preferences', {})
+            video_prefs = preferences.get('video_preferences', {})
+            
+            prompt = f"""
+            You are a creative video director. Create 5 detailed, specific video concepts for a music video with these parameters:
+
+            Music Style:
+            - Genre: {music_prefs.get('genre', 'pop')}
+            - Mood: {music_prefs.get('mood', 'upbeat')}
+            - Tempo: {music_prefs.get('tempo', 'medium')}
+            - Duration: {music_prefs.get('duration', 60)} seconds
+
+            Visual Requirements:
+            - Style: {video_prefs.get('visual_style', 'modern')}
+            - Colors: {video_prefs.get('color_scheme', 'vibrant')}
+            - Animation: {video_prefs.get('animation_style', 'smooth')}
+            - Resolution: {video_prefs.get('resolution', '1080p')}
+
+            For each concept, provide:
+            1. A creative title
+            2. Detailed description of specific scenes, camera work, lighting, and visual elements
+            3. How it connects to the music style
+
+            Make each concept unique and visually detailed - not generic descriptions.
+
+            Format as:
+            CONCEPT 1:
+            Title: [Creative Title]
+            Description: [Detailed visual description]
+
+            CONCEPT 2:
+            Title: [Creative Title]
+            Description: [Detailed visual description]
+
+            [Continue for 5 concepts]
+            """
+            
+            response = self.model.generate_content(prompt)
+            suggestions = self._parse_suggestions(response.text, preferences)
             
             return {'success': True, 'suggestions': suggestions}
             
         except Exception as e:
             logger.error(f"Gemini error: {e}")
-            return {'success': False, 'error': str(e)}
+            return self._get_detailed_fallback_suggestions(preferences)
+    
+    def _parse_suggestions(self, response_text: str, preferences: Dict[str, Any]) -> List[Dict[str, str]]:
+        """Parse Gemini response into structured suggestions"""
+        suggestions = []
+        lines = response_text.split('\n')
+        
+        current_title = ""
+        current_description = ""
+        
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+                
+            if line.startswith('CONCEPT') or line.startswith('Title:'):
+                if current_title and current_description:
+                    suggestions.append({
+                        'title': current_title,
+                        'description': current_description
+                    })
+                
+                if line.startswith('Title:'):
+                    current_title = line.replace('Title:', '').strip()
+                current_description = ""
+            elif line.startswith('Description:'):
+                current_description = line.replace('Description:', '').strip()
+            elif current_title and not current_description:
+                current_title = line
+            elif current_title and current_description:
+                current_description += " " + line
+        
+        # Add the last suggestion
+        if current_title and current_description:
+            suggestions.append({
+                'title': current_title,
+                'description': current_description
+            })
+        
+        # If parsing failed, return detailed fallbacks
+        if not suggestions:
+            return self._get_detailed_fallback_suggestions(preferences)['suggestions']
+        
+        return suggestions[:5]
+    
+    def _get_detailed_fallback_suggestions(self, preferences: Dict[str, Any]) -> Dict[str, Any]:
+        """Provide detailed fallback suggestions when Gemini fails"""
+        music_prefs = preferences.get('music_preferences', {})
+        video_prefs = preferences.get('video_preferences', {})
+        
+        genre = music_prefs.get('genre', 'pop')
+        mood = music_prefs.get('mood', 'upbeat')
+        style = video_prefs.get('visual_style', 'modern')
+        colors = video_prefs.get('color_scheme', 'vibrant')
+        
+        suggestions = [
+            {
+                'title': f'Kinetic Typography Symphony',
+                'description': f'Dynamic text animations floating through a {colors} {style} environment. Words from the {genre} lyrics materialize as 3D objects, rotating and morphing with the {mood} beat. Camera swoops through floating letter sculptures while {colors} particles trail behind each word. Background features subtle geometric patterns that pulse with bass frequencies. Close-up shots of individual letters transforming into musical notes, creating a synesthetic experience between text and sound.'
+            },
+            {
+                'title': f'Liquid Color Choreography',
+                'description': f'Flowing liquid simulations in {colors} hues dance to the {genre} rhythm. Each drop and splash corresponds to musical elements - bass notes create large wave formations while higher frequencies generate fine mist effects. The {style} aesthetic is achieved through sleek surface reflections and modern lighting. Camera follows the liquid through various containers and environments, with slow-motion captures during musical crescendos. Color gradients shift seamlessly, creating an organic light show that mirrors the {mood} energy of the track.'
+            },
+            {
+                'title': f'Geometric Metamorphosis',
+                'description': f'Abstract geometric shapes continuously transform in a {colors} {style} space. Cubes morph into spheres, pyramids unfold into complex fractals, all synchronized to the {genre} beat. Each shape represents different instrumental layers - drums trigger angular transformations while melodies create smooth, flowing changes. The {mood} energy is captured through the speed and complexity of transformations. Camera angles shift dynamically, sometimes diving inside the geometric structures, other times pulling back to reveal the full choreographed pattern.'
+            },
+            {
+                'title': f'Neon Circuit Landscape',
+                'description': f'A {style} digital landscape where {colors} neon circuits pulse with the {genre} music. Electronic pathways light up in sequence, creating a living circuit board that extends infinitely. Each musical element triggers different circuit patterns - bass lines create thick, glowing highways while treble frequencies generate intricate, delicate pathways. The {mood} atmosphere is enhanced by electrical arcs and digital particle effects. Camera travels along the circuit paths, diving through electronic components and emerging in new digital territories.'
+            },
+            {
+                'title': f'Crystalline Resonance Garden',
+                'description': f'A mystical garden of {colors} crystal formations that grow and resonate with the {genre} music. Each crystal structure represents different musical frequencies, growing taller and more complex during intense musical passages. The {style} aesthetic is achieved through precise geometric crystal shapes and modern lighting effects. Prismatic light refractions create rainbow cascades that shift with the {mood} energy. Camera weaves between crystal formations, capturing close-ups of their growth patterns and wide shots of the entire resonating garden ecosystem.'
+            }
+        ]
+        
+        return {'success': True, 'suggestions': suggestions}
 
 # ============== INITIALIZE SERVICES ==============
 
