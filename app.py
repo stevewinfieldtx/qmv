@@ -32,11 +32,13 @@ except Exception as e:
 from services.preference_processor import PreferenceProcessor
 from utils.validators import PreferenceValidator
 from utils.session_manager import SessionManager
+from services.gemini_service import GeminiService
 
 # Initialize services
 preference_processor = PreferenceProcessor()
 validator = PreferenceValidator()
 session_manager = SessionManager(redis_client)
+gemini_service = GeminiService()
 
 @app.route('/')
 def index():
@@ -126,6 +128,102 @@ def get_presets():
         'success': True,
         'presets': presets
     })
+
+@app.route('/api/enhance-video-prompt', methods=['POST'])
+def enhance_video_prompt():
+    """Enhance user's video prompt using Gemini AI"""
+    try:
+        data = request.get_json()
+        user_prompt = data.get('prompt', '')
+        session_id = data.get('session_id', '')
+        
+        if not user_prompt:
+            return jsonify({
+                'success': False,
+                'error': 'No prompt provided'
+            }), 400
+        
+        # Get user preferences if session_id provided
+        preferences = {}
+        if session_id:
+            preferences = session_manager.get_preferences(session_id) or {}
+        
+        # Enhance prompt with Gemini
+        result = gemini_service.enhance_video_prompt(user_prompt, preferences)
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Error in enhance_video_prompt: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error'
+        }), 500
+
+@app.route('/api/video-suggestions', methods=['POST'])
+def get_video_suggestions():
+    """Get AI-generated video suggestions based on preferences"""
+    try:
+        data = request.get_json()
+        session_id = data.get('session_id', '')
+        temp_preferences = data.get('preferences', {})
+        
+        # Get user preferences
+        preferences = {}
+        if session_id:
+            preferences = session_manager.get_preferences(session_id) or {}
+        elif temp_preferences:
+            # Use temporary preferences if no session
+            preferences = preference_processor.process_preferences(temp_preferences, 'temp')
+        
+        if not preferences:
+            return jsonify({
+                'success': False,
+                'error': 'No preferences available'
+            }), 400
+        
+        # Generate suggestions
+        result = gemini_service.generate_video_suggestions(preferences)
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Error in get_video_suggestions: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error'
+        }), 500
+
+@app.route('/api/enhance-music-prompt', methods=['POST'])
+def enhance_music_prompt():
+    """Enhance user's music prompt using Gemini AI"""
+    try:
+        data = request.get_json()
+        user_prompt = data.get('prompt', '')
+        session_id = data.get('session_id', '')
+        
+        if not user_prompt:
+            return jsonify({
+                'success': False,
+                'error': 'No prompt provided'
+            }), 400
+        
+        # Get user preferences
+        preferences = {}
+        if session_id:
+            preferences = session_manager.get_preferences(session_id) or {}
+        
+        # Enhance prompt
+        result = gemini_service.enhance_music_prompt(user_prompt, preferences)
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Error in enhance_music_prompt: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error'
+        }), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
