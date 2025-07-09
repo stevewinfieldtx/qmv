@@ -41,7 +41,6 @@ try:
     gemini_api_key = os.environ.get('GEMINI_API_KEY')
     if gemini_api_key:
         genai.configure(api_key=gemini_api_key)
-        # Use the correct model name - try both options
         try:
             gemini_model = genai.GenerativeModel('gemini-1.5-flash')
             logger.info("Gemini service initialized with gemini-1.5-flash")
@@ -145,10 +144,15 @@ class PreferenceValidator:
         if project_name and len(project_name) > 100:
             errors.append("Project name must be less than 100 characters")
         
+        # Image prompt validation
+        image_prompt = data.get('image_prompt', '')
+        if image_prompt and len(image_prompt) > 1500:
+            errors.append("Image prompt must be less than 1500 characters")
+        
         return {'valid': len(errors) == 0, 'errors': errors}
 
 class PreferenceProcessor:
-    """Process and structure user preferences for music and video generation"""
+    """Process and structure user preferences for music and image generation"""
     
     def __init__(self):
         self.presets = {
@@ -172,26 +176,43 @@ class PreferenceProcessor:
     
     def process_preferences(self, raw_data: Dict[str, Any], session_id: str) -> Dict[str, Any]:
         """Process raw user input into structured preferences"""
+        
+        # Calculate image count based on tempo and duration
+        tempo = raw_data.get('tempo', 'medium')
+        duration = int(raw_data.get('duration', 60))
+        
+        # BPM mapping for image generation
+        bpm_mapping = {
+            'slow': 80,      # 1.33 seconds per image
+            'medium': 120,   # 1 second per image  
+            'fast': 160,     # 0.75 seconds per image
+            'very_fast': 200 # 0.6 seconds per image
+        }
+        
+        bpm = bpm_mapping.get(tempo, 120)
+        images_needed = int((duration * bpm) / 60)  # Calculate images needed
+        
         return {
             'session_id': session_id,
             'timestamp': datetime.utcnow().isoformat(),
             'music_preferences': {
                 'genre': raw_data.get('genre', 'pop'),
                 'mood': raw_data.get('mood', 'upbeat'),
-                'tempo': raw_data.get('tempo', 'medium'),
-                'duration': int(raw_data.get('duration', 60)),
+                'tempo': tempo,
+                'duration': duration,
                 'energy_level': raw_data.get('energy_level', 'medium'),
                 'vocal_style': raw_data.get('vocal_style', 'none'),
                 'music_prompt': raw_data.get('music_prompt', '')
             },
-            'video_preferences': {
+            'image_preferences': {
                 'visual_style': raw_data.get('visual_style', 'modern'),
                 'color_scheme': raw_data.get('color_scheme', 'vibrant'),
-                'animation_style': raw_data.get('animation_style', 'smooth'),
                 'aspect_ratio': raw_data.get('aspect_ratio', '16:9'),
                 'resolution': raw_data.get('resolution', '1080p'),
-                'transition_style': raw_data.get('transition_style', 'fade'),
-                'video_prompt': raw_data.get('video_prompt', '')
+                'image_prompt': raw_data.get('image_prompt', ''),
+                'images_needed': images_needed,
+                'bpm': bpm,
+                'seconds_per_image': 60 / bpm
             },
             'general_preferences': {
                 'project_name': raw_data.get('project_name', ''),
@@ -211,129 +232,129 @@ class GeminiService:
     def __init__(self, model):
         self.model = model
     
-    def enhance_video_prompt(self, user_input: str, preferences: Dict[str, Any]) -> Dict[str, Any]:
-        """Enhance user's video prompt with AI suggestions"""
+    def enhance_image_prompt(self, user_input: str, preferences: Dict[str, Any]) -> Dict[str, Any]:
+        """Enhance user's image prompt with AI suggestions - REALISTIC & UNDER 1500 CHARS"""
         try:
             if not self.model:
                 return {'success': False, 'error': 'Gemini API not configured'}
             
             # Get context from preferences
             music_prefs = preferences.get('music_preferences', {})
-            video_prefs = preferences.get('video_preferences', {})
+            image_prefs = preferences.get('image_preferences', {})
             
             prompt = f"""
-            You are a professional video director and creative prompt engineer. Take this user's basic video concept and transform it into a detailed, specific, and visually rich prompt for AI video generation.
-
-            User's input: "{user_input}"
+            You are helping create a realistic image prompt for AI image generation for a music slideshow.
             
-            Context:
-            - Music Genre: {music_prefs.get('genre', 'pop')}
-            - Music Mood: {music_prefs.get('mood', 'upbeat')}
-            - Music Tempo: {music_prefs.get('tempo', 'medium')}
-            - Visual Style: {video_prefs.get('visual_style', 'modern')}
-            - Color Scheme: {video_prefs.get('color_scheme', 'vibrant')}
-            - Duration: {music_prefs.get('duration', 60)} seconds
-
-            Please create an enhanced video prompt that includes:
-            1. Specific visual scenes and imagery
-            2. Camera movements and angles
-            3. Lighting and atmosphere details
-            4. Color palette specifics
-            5. Scene transitions and pacing
-            6. Visual effects and style elements
-
-            Make it detailed enough that an AI video generator could create something compelling and specific, not generic.
+            User's basic idea: "{user_input}"
+            
+            Music context:
+            - Genre: {music_prefs.get('genre', 'pop')}
+            - Mood: {music_prefs.get('mood', 'upbeat')}
+            - Style: {image_prefs.get('visual_style', 'modern')}
+            - Colors: {image_prefs.get('color_scheme', 'vibrant')}
+            
+            Create a realistic, specific image prompt that:
+            1. Is under 1500 characters
+            2. Describes something that actually exists/could exist
+            3. Is clear and specific for AI image generation
+            4. Matches the music mood and style
+            5. Avoids overly abstract or impossible concepts
+            
+            Focus on real subjects, settings, lighting, and compositions that would work well for a music slideshow.
             """
             
             response = self.model.generate_content(prompt)
             enhanced_prompt = response.text.strip()
             
-            # Create alternatives
+            # Ensure under 1500 characters
+            if len(enhanced_prompt) > 1500:
+                enhanced_prompt = enhanced_prompt[:1497] + "..."
+            
+            # Create realistic alternatives
             alternatives = []
-            for i in range(3):
+            alt_concepts = [
+                "a portrait-focused version",
+                "a landscape/environment version", 
+                "a close-up detail version"
+            ]
+            
+            for concept in alt_concepts:
                 alt_prompt = f"""
-                Create a different detailed video concept based on: "{user_input}"
+                Create {concept} of: "{user_input}"
+                Style: {image_prefs.get('visual_style', 'modern')}
+                Colors: {image_prefs.get('color_scheme', 'vibrant')}
+                Music mood: {music_prefs.get('mood', 'upbeat')}
                 
-                Style: {video_prefs.get('visual_style', 'modern')}
-                Colors: {video_prefs.get('color_scheme', 'vibrant')}
-                Music: {music_prefs.get('genre', 'pop')} - {music_prefs.get('mood', 'upbeat')}
-                
-                Focus on alternative #{i+1}: Make this concept unique and specific with detailed visual descriptions.
+                Keep it realistic and under 200 characters.
                 """
                 
                 try:
                     alt_response = self.model.generate_content(alt_prompt)
-                    alternatives.append(alt_response.text.strip())
+                    alt_text = alt_response.text.strip()
+                    if len(alt_text) > 200:
+                        alt_text = alt_text[:197] + "..."
+                    alternatives.append(alt_text)
                 except:
-                    alternatives.append(f"Alternative concept focusing on {video_prefs.get('visual_style', 'modern')} aesthetics with {video_prefs.get('color_scheme', 'vibrant')} color grading")
+                    alternatives.append(f"A {concept} with {image_prefs.get('color_scheme', 'vibrant')} colors and {image_prefs.get('visual_style', 'modern')} style")
             
             return {
                 'success': True,
                 'enhanced_prompt': enhanced_prompt,
                 'alternatives': alternatives[:3],
-                'technical_notes': f"Optimized for {video_prefs.get('resolution', '1080p')} {video_prefs.get('aspect_ratio', '16:9')} video generation with {music_prefs.get('duration', 60)} second duration",
-                'original_prompt': user_input
+                'technical_notes': f"Will generate {image_prefs.get('images_needed', 60)} image variations for {music_prefs.get('duration', 60)} second slideshow",
+                'original_prompt': user_input,
+                'character_count': len(enhanced_prompt)
             }
             
         except Exception as e:
             logger.error(f"Gemini error: {e}")
             return {'success': False, 'error': f'Gemini API error: {str(e)}'}
     
-    def generate_video_suggestions(self, preferences: Dict[str, Any]) -> Dict[str, Any]:
-        """Generate detailed video suggestions based on preferences"""
+    def generate_image_suggestions(self, preferences: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate realistic image suggestions based on preferences"""
         try:
             if not self.model:
-                # Provide detailed fallback suggestions
-                return self._get_detailed_fallback_suggestions(preferences)
+                return self._get_realistic_fallback_suggestions(preferences)
             
             music_prefs = preferences.get('music_preferences', {})
-            video_prefs = preferences.get('video_preferences', {})
+            image_prefs = preferences.get('image_preferences', {})
             
             prompt = f"""
-            You are a creative video director. Create 5 detailed, specific video concepts for a music video with these parameters:
+            Create 5 realistic image concepts for a music slideshow with these parameters:
 
-            Music Style:
-            - Genre: {music_prefs.get('genre', 'pop')}
-            - Mood: {music_prefs.get('mood', 'upbeat')}
-            - Tempo: {music_prefs.get('tempo', 'medium')}
-            - Duration: {music_prefs.get('duration', 60)} seconds
-
-            Visual Requirements:
-            - Style: {video_prefs.get('visual_style', 'modern')}
-            - Colors: {video_prefs.get('color_scheme', 'vibrant')}
-            - Animation: {video_prefs.get('animation_style', 'smooth')}
-            - Resolution: {video_prefs.get('resolution', '1080p')}
+            Music: {music_prefs.get('genre', 'pop')} - {music_prefs.get('mood', 'upbeat')} - {music_prefs.get('tempo', 'medium')} tempo
+            Visual: {image_prefs.get('visual_style', 'modern')} style with {image_prefs.get('color_scheme', 'vibrant')} colors
+            Duration: {music_prefs.get('duration', 60)} seconds ({image_prefs.get('images_needed', 60)} images needed)
 
             For each concept, provide:
-            1. A creative title
-            2. Detailed description of specific scenes, camera work, lighting, and visual elements
-            3. How it connects to the music style
+            1. A clear, descriptive title
+            2. A realistic description (under 300 characters) of what would be shown
+            3. Focus on real subjects, places, and scenarios that exist
 
-            Make each concept unique and visually detailed - not generic descriptions.
+            Make them varied but all realistic and suitable for AI image generation.
+            Avoid overly abstract or impossible concepts.
 
             Format as:
-            CONCEPT 1:
-            Title: [Creative Title]
-            Description: [Detailed visual description]
+            1. Title: [Title]
+            Description: [Description]
 
-            CONCEPT 2:
-            Title: [Creative Title]
-            Description: [Detailed visual description]
+            2. Title: [Title]
+            Description: [Description]
 
             [Continue for 5 concepts]
             """
             
             response = self.model.generate_content(prompt)
-            suggestions = self._parse_suggestions(response.text, preferences)
+            suggestions = self._parse_realistic_suggestions(response.text, preferences)
             
             return {'success': True, 'suggestions': suggestions}
             
         except Exception as e:
             logger.error(f"Gemini error: {e}")
-            return self._get_detailed_fallback_suggestions(preferences)
+            return self._get_realistic_fallback_suggestions(preferences)
     
-    def _parse_suggestions(self, response_text: str, preferences: Dict[str, Any]) -> List[Dict[str, str]]:
-        """Parse Gemini response into structured suggestions"""
+    def _parse_realistic_suggestions(self, response_text: str, preferences: Dict[str, Any]) -> List[Dict[str, str]]:
+        """Parse Gemini response into realistic suggestions"""
         suggestions = []
         lines = response_text.split('\n')
         
@@ -345,8 +366,12 @@ class GeminiService:
             if not line:
                 continue
                 
-            if line.startswith('CONCEPT') or line.startswith('Title:'):
+            if line.startswith(('1.', '2.', '3.', '4.', '5.')) or line.startswith('Title:'):
                 if current_title and current_description:
+                    # Ensure description is under 300 characters
+                    if len(current_description) > 300:
+                        current_description = current_description[:297] + "..."
+                    
                     suggestions.append({
                         'title': current_title,
                         'description': current_description
@@ -354,57 +379,59 @@ class GeminiService:
                 
                 if line.startswith('Title:'):
                     current_title = line.replace('Title:', '').strip()
+                else:
+                    current_title = line.replace('1.', '').replace('2.', '').replace('3.', '').replace('4.', '').replace('5.', '').replace('Title:', '').strip()
                 current_description = ""
             elif line.startswith('Description:'):
                 current_description = line.replace('Description:', '').strip()
-            elif current_title and not current_description:
-                current_title = line
             elif current_title and current_description:
                 current_description += " " + line
         
         # Add the last suggestion
         if current_title and current_description:
+            if len(current_description) > 300:
+                current_description = current_description[:297] + "..."
             suggestions.append({
                 'title': current_title,
                 'description': current_description
             })
         
-        # If parsing failed, return detailed fallbacks
+        # If parsing failed, return realistic fallbacks
         if not suggestions:
-            return self._get_detailed_fallback_suggestions(preferences)['suggestions']
+            return self._get_realistic_fallback_suggestions(preferences)['suggestions']
         
         return suggestions[:5]
     
-    def _get_detailed_fallback_suggestions(self, preferences: Dict[str, Any]) -> Dict[str, Any]:
-        """Provide detailed fallback suggestions when Gemini fails"""
+    def _get_realistic_fallback_suggestions(self, preferences: Dict[str, Any]) -> Dict[str, Any]:
+        """Provide realistic fallback suggestions"""
         music_prefs = preferences.get('music_preferences', {})
-        video_prefs = preferences.get('video_preferences', {})
+        image_prefs = preferences.get('image_preferences', {})
         
         genre = music_prefs.get('genre', 'pop')
         mood = music_prefs.get('mood', 'upbeat')
-        style = video_prefs.get('visual_style', 'modern')
-        colors = video_prefs.get('color_scheme', 'vibrant')
+        style = image_prefs.get('visual_style', 'modern')
+        colors = image_prefs.get('color_scheme', 'vibrant')
         
         suggestions = [
             {
-                'title': f'Kinetic Typography Symphony',
-                'description': f'Dynamic text animations floating through a {colors} {style} environment. Words from the {genre} lyrics materialize as 3D objects, rotating and morphing with the {mood} beat. Camera swoops through floating letter sculptures while {colors} particles trail behind each word. Background features subtle geometric patterns that pulse with bass frequencies. Close-up shots of individual letters transforming into musical notes, creating a synesthetic experience between text and sound.'
+                'title': f'Urban {style.title()} Portrait',
+                'description': f'A person in {style} clothing against a city backdrop with {colors} lighting. Clean composition with shallow depth of field, perfect for {genre} music.'
             },
             {
-                'title': f'Liquid Color Choreography',
-                'description': f'Flowing liquid simulations in {colors} hues dance to the {genre} rhythm. Each drop and splash corresponds to musical elements - bass notes create large wave formations while higher frequencies generate fine mist effects. The {style} aesthetic is achieved through sleek surface reflections and modern lighting. Camera follows the liquid through various containers and environments, with slow-motion captures during musical crescendos. Color gradients shift seamlessly, creating an organic light show that mirrors the {mood} energy of the track.'
+                'title': f'Nature & Music',
+                'description': f'Beautiful natural landscape with {colors} sunset/sunrise colors. {style} composition capturing the {mood} mood through lighting and scenery.'
             },
             {
-                'title': f'Geometric Metamorphosis',
-                'description': f'Abstract geometric shapes continuously transform in a {colors} {style} space. Cubes morph into spheres, pyramids unfold into complex fractals, all synchronized to the {genre} beat. Each shape represents different instrumental layers - drums trigger angular transformations while melodies create smooth, flowing changes. The {mood} energy is captured through the speed and complexity of transformations. Camera angles shift dynamically, sometimes diving inside the geometric structures, other times pulling back to reveal the full choreographed pattern.'
+                'title': f'Studio Performance',
+                'description': f'Musician with instruments in a {style} studio setting. {colors} stage lighting creates dynamic shadows and highlights matching the {genre} vibe.'
             },
             {
-                'title': f'Neon Circuit Landscape',
-                'description': f'A {style} digital landscape where {colors} neon circuits pulse with the {genre} music. Electronic pathways light up in sequence, creating a living circuit board that extends infinitely. Each musical element triggers different circuit patterns - bass lines create thick, glowing highways while treble frequencies generate intricate, delicate pathways. The {mood} atmosphere is enhanced by electrical arcs and digital particle effects. Camera travels along the circuit paths, diving through electronic components and emerging in new digital territories.'
+                'title': f'City Life Montage',
+                'description': f'Urban scenes with {colors} neon signs and {style} architecture. Street photography style capturing the energy of {mood} {genre} music.'
             },
             {
-                'title': f'Crystalline Resonance Garden',
-                'description': f'A mystical garden of {colors} crystal formations that grow and resonate with the {genre} music. Each crystal structure represents different musical frequencies, growing taller and more complex during intense musical passages. The {style} aesthetic is achieved through precise geometric crystal shapes and modern lighting effects. Prismatic light refractions create rainbow cascades that shift with the {mood} energy. Camera weaves between crystal formations, capturing close-ups of their growth patterns and wide shots of the entire resonating garden ecosystem.'
+                'title': f'Abstract Objects',
+                'description': f'{style} still life with everyday objects arranged artistically. {colors} color palette with interesting textures and geometric shapes.'
             }
         ]
         
@@ -436,7 +463,7 @@ def health_check():
 
 @app.route('/api/preferences', methods=['POST'])
 def submit_preferences():
-    """Handle user preference submission"""
+    """Handle user preference submission and trigger Phase 2"""
     try:
         data = request.get_json()
         
@@ -464,11 +491,17 @@ def submit_preferences():
         
         logger.info(f"Preferences stored for session: {session_id}")
         
+        # Trigger Phase 2 automatically
+        if redis_client:
+            redis_client.publish('phase1_completed', session_id)
+            logger.info(f"Triggered Phase 2 for session: {session_id}")
+        
         return jsonify({
             'success': True,
             'session_id': session_id,
-            'message': 'Preferences saved successfully',
-            'next_phase': 'music_creation'
+            'message': 'Preferences saved and Phase 2 triggered',
+            'images_needed': processed_data['image_preferences']['images_needed'],
+            'next_phase': 'music_and_image_creation'
         })
         
     except Exception as e:
@@ -516,9 +549,9 @@ def get_presets():
         'presets': presets
     })
 
-@app.route('/api/enhance-video-prompt', methods=['POST'])
-def enhance_video_prompt():
-    """Enhance user's video prompt using Gemini AI"""
+@app.route('/api/enhance-image-prompt', methods=['POST'])
+def enhance_image_prompt():
+    """Enhance user's image prompt using Gemini AI"""
     try:
         data = request.get_json()
         user_prompt = data.get('prompt', '')
@@ -539,19 +572,19 @@ def enhance_video_prompt():
                 preferences = session.get(session_id, {})
         
         # Enhance prompt
-        result = gemini_service.enhance_video_prompt(user_prompt, preferences)
+        result = gemini_service.enhance_image_prompt(user_prompt, preferences)
         return jsonify(result)
         
     except Exception as e:
-        logger.error(f"Error in enhance_video_prompt: {e}")
+        logger.error(f"Error in enhance_image_prompt: {e}")
         return jsonify({
             'success': False,
             'error': 'Internal server error'
         }), 500
 
-@app.route('/api/video-suggestions', methods=['POST'])
-def get_video_suggestions():
-    """Get AI-generated video suggestions"""
+@app.route('/api/image-suggestions', methods=['POST'])
+def get_image_suggestions():
+    """Get AI-generated image suggestions"""
     try:
         data = request.get_json()
         session_id = data.get('session_id', '')
@@ -574,11 +607,11 @@ def get_video_suggestions():
             }), 400
         
         # Generate suggestions
-        result = gemini_service.generate_video_suggestions(preferences)
+        result = gemini_service.generate_image_suggestions(preferences)
         return jsonify(result)
         
     except Exception as e:
-        logger.error(f"Error in get_video_suggestions: {e}")
+        logger.error(f"Error in get_image_suggestions: {e}")
         return jsonify({
             'success': False,
             'error': 'Internal server error'
@@ -606,19 +639,23 @@ def enhance_music_prompt():
             else:
                 preferences = session.get(session_id, {})
         
-        # Simple enhancement (can be expanded with Gemini)
-        enhanced_prompt = f"Enhanced: {user_prompt}"
+        # Simple enhancement for music
+        enhanced_prompt = f"Create a {preferences.get('music_preferences', {}).get('genre', 'pop')} song with {preferences.get('music_preferences', {}).get('mood', 'upbeat')} mood. {user_prompt}"
+        
+        if len(enhanced_prompt) > 500:
+            enhanced_prompt = enhanced_prompt[:497] + "..."
         
         return jsonify({
             'success': True,
             'enhanced_prompt': enhanced_prompt,
             'alternatives': [
-                f"Alternative 1: {user_prompt} with dynamic arrangement",
-                f"Alternative 2: {user_prompt} with modern production",
-                f"Alternative 3: {user_prompt} with rich instrumentation"
+                f"Focus on {preferences.get('music_preferences', {}).get('tempo', 'medium')} tempo: {user_prompt}",
+                f"Emphasize {preferences.get('music_preferences', {}).get('energy_level', 'medium')} energy: {user_prompt}",
+                f"Modern production style: {user_prompt}"
             ],
-            'technical_notes': "AI-enhanced music prompt",
-            'original_prompt': user_prompt
+            'technical_notes': f"Optimized for {preferences.get('music_preferences', {}).get('duration', 60)} second duration",
+            'original_prompt': user_prompt,
+            'character_count': len(enhanced_prompt)
         })
         
     except Exception as e:
