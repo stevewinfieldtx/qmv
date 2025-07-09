@@ -1,3 +1,4 @@
+```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -13,13 +14,11 @@
 </head>
 <body class="bg-gray-50">
     <div class="container mx-auto px-4 py-8">
-        <!-- Header -->
         <div class="text-center mb-8">
             <h1 class="text-4xl font-bold text-gray-800 mb-2">Quick Music Videos</h1>
-            <p class="text-gray-600">Create amazing music videos in minutes</p>
+            <p class="text-gray-600">Create music slideshows with AI-generated images</p>
         </div>
 
-        <!-- Progress Steps -->
         <div class="flex justify-center mb-8">
             <div class="flex space-x-4">
                 <div class="step-active rounded-full w-8 h-8 flex items-center justify-center text-sm font-semibold">1</div>
@@ -28,10 +27,8 @@
             </div>
         </div>
 
-        <!-- Main Form -->
         <div class="max-w-4xl mx-auto bg-white rounded-lg shadow-lg p-8">
             <form id="preferencesForm">
-                <!-- Presets Section -->
                 <div class="mb-8">
                     <h2 class="text-2xl font-semibold mb-4">Quick Start Presets</h2>
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4" id="presets">
@@ -39,11 +36,9 @@
                     </div>
                 </div>
 
-                <!-- Music Preferences -->
                 <div class="mb-8">
                     <h2 class="text-2xl font-semibold mb-4">Music Preferences</h2>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <!-- Genre -->
                         <div>
                             <label class="block text-sm font-medium mb-2">Genre</label>
                             <select id="genre" name="genre" class="w-full p-3 border rounded-lg">
@@ -53,18 +48,9 @@
                                 <option value="electronic">Electronic</option>
                                 <option value="hip-hop">Hip Hop</option>
                                 <option value="jazz">Jazz</option>
-                                <option value="classical">Classical</option>
-                                <option value="country">Country</option>
-                                <option value="folk">Folk</option>
-                                <option value="reggae">Reggae</option>
-                                <option value="blues">Blues</option>
-                                <option value="funk">Funk</option>
                                 <option value="lofi">Lo-Fi</option>
-                                <option value="ambient">Ambient</option>
                             </select>
                         </div>
-
-                        <!-- Mood -->
                         <div>
                             <label class="block text-sm font-medium mb-2">Mood</label>
                             <select id="mood" name="mood" class="w-full p-3 border rounded-lg">
@@ -72,65 +58,35 @@
                                 <option value="upbeat">Upbeat</option>
                                 <option value="relaxed">Relaxed</option>
                                 <option value="energetic">Energetic</option>
-                                <option value="melancholic">Melancholic</option>
-                                <option value="happy">Happy</option>
-                                <option value="sad">Sad</option>
-                                <option value="angry">Angry</option>
                                 <option value="peaceful">Peaceful</option>
-                                <option value="dramatic">Dramatic</option>
-                                <option value="mysterious">Mysterious</option>
-                                <option value="romantic">Romantic</option>
                             </select>
                         </div>
-
-                        <!-- Tempo -->
                         <div>
                             <label class="block text-sm font-medium mb-2">Tempo</label>
-                            <select id="tempo" name="tempo" class="w-full p-3 border rounded-lg">
+                            <select id="tempo" name="tempo" class="w-full p-3 border rounded-lg" onchange="updateImageCount()">
                                 <option value="">Select Tempo</option>
-                                <option value="slow">Slow</option>
-                                <option value="medium">Medium</option>
-                                <option value="fast">Fast</option>
-                                <option value="very_fast">Very Fast</option>
+                                <option value="slow">Slow (80 BPM)</option>
+                                <option value="medium">Medium (120 BPM)</option>
+                                <option value="fast">Fast (160 BPM)</option>
+                                <option value="very_fast">Very Fast (200 BPM)</option>
                             </select>
                         </div>
-
-                        <!-- Duration -->
                         <div>
                             <label class="block text-sm font-medium mb-2">Duration (seconds)</label>
-                            <input type="number" id="duration" name="duration" min="10" max="300" value="60" class="w-full p-3 border rounded-lg">
+                            <input type="number" id="duration" name="duration" min="10" max="300" value="60" class="w-full p-3 border rounded-lg" onchange="updateImageCount()">
                         </div>
-
-                        <!-- Energy Level -->
-                        <div>
-                            <label class="block text-sm font-medium mb-2">Energy Level</label>
-                            <select id="energy_level" name="energy_level" class="w-full p-3 border rounded-lg">
-                                <option value="">Select Energy</option>
-                                <option value="low">Low</option>
-                                <option value="medium">Medium</option>
-                                <option value="high">High</option>
-                            </select>
-                        </div>
-
-                        <!-- Vocal Style -->
-                        <div>
-                            <label class="block text-sm font-medium mb-2">Vocal Style</label>
-                            <select id="vocal_style" name="vocal_style" class="w-full p-3 border rounded-lg">
-                                <option value="none">Instrumental</option>
-                                <option value="male">Male Vocals</option>
-                                <option value="female">Female Vocals</option>
-                                <option value="choir">Choir</option>
-                                <option value="rap">Rap</option>
-                            </select>
-                        </div>
+                    </div>
+                    <div class="mt-4 p-3 bg-blue-50 rounded-lg">
+                        <p class="text-sm text-blue-800">
+                            <strong>Images needed:</strong> <span id="imageCount">120</span> images
+                            <br><small>Based on tempo and duration (1 image per beat)</small>
+                        </p>
                     </div>
                 </div>
 
-                <!-- Video Preferences -->
                 <div class="mb-8">
-                    <h2 class="text-2xl font-semibold mb-4">Video Preferences</h2>
+                    <h2 class="text-2xl font-semibold mb-4">Image Preferences</h2>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <!-- Visual Style -->
                         <div>
                             <label class="block text-sm font-medium mb-2">Visual Style</label>
                             <select id="visual_style" name="visual_style" class="w-full p-3 border rounded-lg">
@@ -139,15 +95,9 @@
                                 <option value="vintage">Vintage</option>
                                 <option value="minimal">Minimal</option>
                                 <option value="bold">Bold</option>
-                                <option value="abstract">Abstract</option>
                                 <option value="realistic">Realistic</option>
-                                <option value="cartoon">Cartoon</option>
-                                <option value="futuristic">Futuristic</option>
-                                <option value="retro">Retro</option>
                             </select>
                         </div>
-
-                        <!-- Color Scheme -->
                         <div>
                             <label class="block text-sm font-medium mb-2">Color Scheme</label>
                             <select id="color_scheme" name="color_scheme" class="w-full p-3 border rounded-lg">
@@ -155,64 +105,12 @@
                                 <option value="vibrant">Vibrant</option>
                                 <option value="pastel">Pastel</option>
                                 <option value="dark">Dark</option>
-                                <option value="monochrome">Monochrome</option>
                                 <option value="neon">Neon</option>
-                                <option value="warm">Warm</option>
-                                <option value="cool">Cool</option>
-                                <option value="earth_tones">Earth Tones</option>
-                                <option value="rainbow">Rainbow</option>
-                            </select>
-                        </div>
-
-                        <!-- Animation Style -->
-                        <div>
-                            <label class="block text-sm font-medium mb-2">Animation Style</label>
-                            <select id="animation_style" name="animation_style" class="w-full p-3 border rounded-lg">
-                                <option value="">Select Animation</option>
-                                <option value="smooth">Smooth</option>
-                                <option value="dynamic">Dynamic</option>
-                                <option value="flowing">Flowing</option>
-                                <option value="intense">Intense</option>
-                                <option value="gentle">Gentle</option>
-                            </select>
-                        </div>
-
-                        <!-- Resolution -->
-                        <div>
-                            <label class="block text-sm font-medium mb-2">Resolution</label>
-                            <select id="resolution" name="resolution" class="w-full p-3 border rounded-lg">
-                                <option value="1080p">1080p (HD)</option>
-                                <option value="720p">720p</option>
-                                <option value="4k">4K (Ultra HD)</option>
-                            </select>
-                        </div>
-
-                        <!-- Aspect Ratio -->
-                        <div>
-                            <label class="block text-sm font-medium mb-2">Aspect Ratio</label>
-                            <select id="aspect_ratio" name="aspect_ratio" class="w-full p-3 border rounded-lg">
-                                <option value="16:9">16:9 (Widescreen)</option>
-                                <option value="9:16">9:16 (Vertical)</option>
-                                <option value="1:1">1:1 (Square)</option>
-                                <option value="4:3">4:3 (Traditional)</option>
-                            </select>
-                        </div>
-
-                        <!-- Transition Style -->
-                        <div>
-                            <label class="block text-sm font-medium mb-2">Transition Style</label>
-                            <select id="transition_style" name="transition_style" class="w-full p-3 border rounded-lg">
-                                <option value="fade">Fade</option>
-                                <option value="cut">Cut</option>
-                                <option value="slide">Slide</option>
-                                <option value="zoom">Zoom</option>
-                                <option value="spin">Spin</option>
                             </select>
                         </div>
                     </div>
                 </div>
 
-                <!-- Project Details -->
                 <div class="mb-8">
                     <h2 class="text-2xl font-semibold mb-4">Project Details</h2>
                     <div class="grid grid-cols-1 gap-6">
@@ -224,66 +122,70 @@
                             <label class="block text-sm font-medium mb-2">Description</label>
                             <textarea id="description" name="description" rows="3" class="w-full p-3 border rounded-lg" placeholder="Describe your vision..."></textarea>
                         </div>
-                        
-                        <!-- AI Enhanced Prompts -->
                         <div>
-                            <label class="block text-sm font-medium mb-2">Video Prompt (AI Enhanced)</label>
+                            <label class="block text-sm font-medium mb-2">Image Prompt (Max 1500 characters)</label>
                             <div class="relative">
-                                <textarea id="video_prompt" name="video_prompt" rows="3" class="w-full p-3 border rounded-lg pr-24" placeholder="Describe your video concept..."></textarea>
+                                <textarea id="image_prompt" name="image_prompt" rows="4" class="w-full p-3 border rounded-lg pr-24" placeholder="Describe what you want to see in the images..." maxlength="1500" onkeyup="updateCharCount()"></textarea>
                                 <div class="absolute right-2 top-2 space-y-1">
-                                    <button type="button" id="enhanceVideoBtn" class="block w-20 text-xs bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600">
+                                    <button type="button" id="enhanceImageBtn" class="block w-20 text-xs bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600">
                                         Enhance
                                     </button>
-                                    <button type="button" id="suggestVideoBtn" class="block w-20 text-xs bg-green-500 text-white px-2 py-1 rounded hover:bg-green-600">
+                                    <button type="button" id="suggestImageBtn" class="block w-20 text-xs bg-green-500 text-white px-2 py-1 rounded hover:bg-green-600">
                                         Suggest
                                     </button>
                                 </div>
                             </div>
-                        </div>
-                        
-                        <div>
-                            <label class="block text-sm font-medium mb-2">Music Prompt (AI Enhanced)</label>
-                            <div class="relative">
-                                <textarea id="music_prompt" name="music_prompt" rows="3" class="w-full p-3 border rounded-lg pr-24" placeholder="Describe your music style..."></textarea>
-                                <button type="button" id="enhanceMusicBtn" class="absolute right-2 top-2 text-xs bg-purple-500 text-white px-2 py-1 rounded hover:bg-purple-600">
-                                    Enhance
-                                </button>
+                            <div class="text-right text-sm text-gray-500 mt-1">
+                                <span id="charCount">0</span>/1500 characters
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Submit Button -->
                 <div class="text-center">
                     <button type="submit" id="submitBtn" class="bg-blue-600 text-white px-8 py-3 rounded-lg text-lg font-semibold hover:bg-blue-700 disabled:opacity-50">
-                        Create Music Video
+                        Create Music Slideshow
                     </button>
                 </div>
             </form>
         </div>
 
-        <!-- Loading Modal -->
         <div id="loadingModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
             <div class="bg-white p-8 rounded-lg text-center">
                 <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
                 <p class="text-lg font-semibold">Processing your preferences...</p>
             </div>
         </div>
-
-        <!-- AI Suggestions Modal -->
-        <div id="suggestionsModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
-            <div class="bg-white p-6 rounded-lg max-w-2xl w-full mx-4 max-h-96 overflow-y-auto">
-                <h3 class="text-lg font-semibold mb-4">AI Suggestions</h3>
-                <div id="suggestionsContent"></div>
-                <div class="mt-4 text-right">
-                    <button id="closeSuggestionsBtn" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">
-                        Close
-                    </button>
-                </div>
-            </div>
-        </div>
     </div>
 
+    <script>
+        function updateImageCount() {
+            const tempo = document.getElementById('tempo').value;
+            const duration = parseInt(document.getElementById('duration').value) || 60;
+            
+            const bpmMapping = {
+                'slow': 80,
+                'medium': 120,
+                'fast': 160,
+                'very_fast': 200
+            };
+            
+            const bpm = bpmMapping[tempo] || 120;
+            const imageCount = Math.floor((duration * bpm) / 60);
+            
+            document.getElementById('imageCount').textContent = imageCount;
+        }
+        
+        function updateCharCount() {
+            const prompt = document.getElementById('image_prompt').value;
+            document.getElementById('charCount').textContent = prompt.length;
+        }
+        
+        // Initialize
+        updateImageCount();
+        updateCharCount();
+    </script>
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>
 </html>
+```
