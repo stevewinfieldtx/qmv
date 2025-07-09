@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Phase 2 - Music Generation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50">
+    <div class="container mx-auto px-4 py-8">
+        <div class="text-center mb-8">
+            <h1 class="text-3xl font-bold text-gray-800 mb-2">Test Phase 2 - Music Generation</h1>
+            <p class="text-gray-600">Test the music generation process independently</p>
+        </div>
+
+        <div class="max-w-2xl mx-auto bg-white rounded-lg shadow-lg p-8">
+            <!-- Step 1: Get Session ID -->
+            <div class="mb-6">
+                <h2 class="text-xl font-semibold mb-4">Step 1: Get Session ID</h2>
+                <div class="flex gap-4">
+                    <input type="text" id="sessionIdInput" class="flex-1 p-3 border rounded-lg" placeholder="Enter session ID or create test preferences">
+                    <button id="getSessionBtn" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                        Get from Storage
+                    </button>
+                </div>
+                <p class="text-sm text-gray-500 mt-2">
+                    Or <button id="createTestBtn" class="text-blue-500 hover:underline">create test preferences</button>
+                </p>
+            </div>
+
+            <!-- Step 2: Show Current Preferences -->
+            <div class="mb-6">
+                <h2 class="text-xl font-semibold mb-4">Step 2: Current Preferences</h2>
+                <div id="preferencesDisplay" class="bg-gray-50 p-4 rounded-lg text-sm">
+                    <em>No session selected</em>
+                </div>
+            </div>
+
+            <!-- Step 3: Trigger Phase 2 -->
+            <div class="mb-6">
+                <h2 class="text-xl font-semibold mb-4">Step 3: Trigger Phase 2</h2>
+                <button id="triggerPhase2Btn" class="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 disabled:opacity-50" disabled>
+                    Start Music Generation
+                </button>
+            </div>
+
+            <!-- Step 4: Monitor Progress -->
+            <div class="mb-6">
+                <h2 class="text-xl font-semibold mb-4">Step 4: Monitor Progress</h2>
+                <div id="statusDisplay" class="bg-gray-50 p-4 rounded-lg">
+                    <em>Not started</em>
+                </div>
+                <button id="refreshStatusBtn" class="mt-2 bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600 disabled:opacity-50" disabled>
+                    Refresh Status
+                </button>
+            </div>
+
+            <!-- Step 5: View Results -->
+            <div class="mb-6">
+                <h2 class="text-xl font-semibold mb-4">Step 5: Results</h2>
+                <div id="resultsDisplay" class="bg-gray-50 p-4 rounded-lg">
+                    <em>No results yet</em>
+                </div>
+                <button id="getResultsBtn" class="mt-2 bg-purple-500 text-white px-4 py-2 rounded hover:bg-purple-600 disabled:opacity-50" disabled>
+                    Get Results
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentSessionId = '';
+        let statusInterval = null;
+
+        // Get session ID from localStorage or manual input
+        document.getElementById('getSessionBtn').addEventListener('click', () => {
+            const inputSession = document.getElementById('sessionIdInput').value.trim();
+            if (inputSession) {
+                currentSessionId = inputSession;
+            } else {
+                currentSessionId = localStorage.getItem('sessionId') || '';
+            }
+            
+            if (currentSessionId) {
+                document.getElementById('sessionIdInput').value = currentSessionId;
+                loadPreferences();
+            } else {
+                alert('No session ID found');
+            }
+        });
+
+        // Create test preferences
+        document.getElementById('createTestBtn').addEventListener('click', async () => {
+            const testPreferences = {
+                genre: 'pop',
+                mood: 'upbeat',
+                tempo: 'medium',
+                duration: 60,
+                energy_level: 'high',
+                vocal_style: 'none',
+                music_prompt: 'Create an energetic pop song with modern beats',
+                visual_style: 'modern',
+                color_scheme: 'vibrant',
+                image_prompt: 'Urban cityscape with vibrant neon lights',
+                project_name: 'Test Music Generation',
+                description: 'Testing Phase 2 music generation'
+            };
+
+            try {
+                const response = await fetch('/api/preferences', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(testPreferences)
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    currentSessionId = data.session_id;
+                    document.getElementById('sessionIdInput').value = currentSessionId;
+                    localStorage.setItem('sessionId', currentSessionId);
+                    loadPreferences();
+                    alert('Test preferences created!');
+                } else {
+                    alert('Error creating preferences: ' + data.error);
+                }
+            } catch (error) {
+                alert('Network error: ' + error.message);
+            }
+        });
+
+        // Load and display preferences
+        async function loadPreferences() {
+            if (!currentSessionId) return;
+
+            try {
+                const response = await fetch(`/api/preferences/${currentSessionId}`);
+                const data = await response.json();
+
+                if (data.success) {
+                    const prefs = data.preferences;
+                    document.getElementById('preferencesDisplay').innerHTML = `
+                        <strong>Music:</strong> ${prefs.music_preferences?.genre} - ${prefs.music_preferences?.mood} - ${prefs.music_preferences?.tempo}<br>
+                        <strong>Project:</strong> ${prefs.general_preferences?.project_name}<br>
+                        <strong>Music Prompt:</strong> ${prefs.music_preferences?.music_prompt}<br>
+                        <strong>Session ID:</strong> ${currentSessionId}
+                    `;
+                    document.getElementById('triggerPhase2Btn').disabled = false;
+                    document.getElementById('refreshStatusBtn').disabled = false;
+                    document.getElementById('getResultsBtn').disabled = false;
+                } else {
+                    document.getElementById('preferencesDisplay').innerHTML = `<em class="text-red-500">Error: ${data.error}</em>`;
+                }
+            } catch (error) {
+                document.getElementById('preferencesDisplay').innerHTML = `<em class="text-red-500">Network error: ${error.message}</em>`;
+            }
+        }
+
+        // Trigger Phase 2
+        document.getElementById('triggerPhase2Btn').addEventListener('click', async () => {
+            if (!currentSessionId) return;
+
+            try {
+                const response = await fetch('/api/test-phase2', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ session_id: currentSessionId })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    document.getElementById('statusDisplay').innerHTML = `
+                        <div class="text-green-600">✅ Phase 2 triggered successfully!</div>
+                        <div class="text-sm text-gray-600 mt-2">
+                            Status endpoint: ${data.status_endpoint}<br>
+                            Results endpoint: ${data.results_endpoint}
+                        </div>
+                    `;
+                    
+                    // Start monitoring
+                    startStatusMonitoring();
+                } else {
+                    document.getElementById('statusDisplay').innerHTML = `<div class="text-red-500">❌ Error: ${data.error}</div>`;
+                }
+            } catch (error) {
+                document.getElementById('statusDisplay').innerHTML = `<div class="text-red-500">❌ Network error: ${error.message}</div>`;
+            }
+        });
+
+        // Start automatic status monitoring
+        function startStatusMonitoring() {
+            if (statusInterval) clearInterval(statusInterval);
+            
+            statusInterval = setInterval(() => {
+                refreshStatus();
+            }, 5000); // Check every 5 seconds
+            
+            refreshStatus(); // Check immediately
+        }
+
+        // Refresh status
+        document.getElementById('refreshStatusBtn').addEventListener('click', refreshStatus);
+
+        async function refreshStatus() {
+            if (!currentSessionId) return;
+
+            try {
+                const response = await fetch(`/api/phase2/status/${currentSessionId}`);
+                const data = await response.json();
+
+                if (data.success) {
+                    const status = data.status;
+                    const statusColor = status.status === 'completed' ? 'text-green-600' : 
+                                      status.status === 'failed' ? 'text-red-600' : 'text-blue-600';
+                    
+                    document.getElementById('statusDisplay').innerHTML = `
+                        <div class="${statusColor}">
+                            <strong>Status:</strong> ${status.status}<br>
+                            <strong>Phase:</strong> ${status.phase}<br>
+                            <strong>Message:</strong> ${status.message}<br>
+                            <strong>Time:</strong> ${new Date(status.timestamp).toLocaleString()}
+                            ${status.songs_count ? `<br><strong>Songs:</strong> ${status.songs_count}` : ''}
+                        </div>
+                    `;
+
+                    if (status.status === 'completed') {
+                        clearInterval(statusInterval);
+                        getResults(); // Automatically get results when completed
+                    } else if (status.status === 'failed') {
+                        clearInterval(statusInterval);
+                    }
+                } else {
+                    document.getElementById('statusDisplay').innerHTML = `<div class="text-gray-500">No status available yet</div>`;
+                }
+            } catch (error) {
+                document.getElementById('statusDisplay').innerHTML = `<div class="text-red-500">Error checking status: ${error.message}</div>`;
+            }
+        }
+
+        // Get results
+        document.getElementById('getResultsBtn').addEventListener('click', getResults);
+
+        async function getResults() {
+            if (!currentSessionId) return;
+
+            try {
+                const response = await fetch(`/api/phase2/results/${currentSessionId}`);
+                const data = await response.json();
+
+                if (data.success) {
+                    const results = data.results;
+                    document.getElementById('resultsDisplay').innerHTML = `
+                        <div class="text-green-600">
+                            <strong>✅ Success!</strong><br>
+                            <strong>Total Songs:</strong> ${results.total_songs}<br>
+                            <strong>Generation ID:</strong> ${results.generation_id}<br>
+                            <strong>Tags Used:</strong> ${results.tags_used}<br>
+                            <strong>Completed:</strong> ${new Date(results.completed_at).toLocaleString()}
+                        </div>
+                        <div class="mt-4">
+                            <strong>Songs:</strong>
+                            ${results.songs.map((song, i) => `
+                                <div class="bg-white p-3 mt-2 rounded border">
+                                    <strong>Song ${i + 1}:</strong> ${song.title}<br>
+                                    <strong>Duration:</strong> ${song.duration}s<br>
+                                    <strong>GCS Path:</strong> <code class="text-xs">${song.gcs_path}</code><br>
+                                    <strong>Public URL:</strong> <a href="${song.public_url}" target="_blank" class="text-blue-500 hover:underline">Listen</a>
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                } else {
+                    document.getElementById('resultsDisplay').innerHTML = `<div class="text-gray-500">No results available yet</div>`;
+                }
+            } catch (error) {
+                document.getElementById('resultsDisplay').innerHTML = `<div class="text-red-500">Error getting results: ${error.message}</div>`;
+            }
+        }
+
+        // Initialize
+        const savedSession = localStorage.getItem('sessionId');
+        if (savedSession) {
+            document.getElementById('sessionIdInput').value = savedSession;
+        }
+    </script>
+</body>
+</html>
