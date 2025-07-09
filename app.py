@@ -564,6 +564,55 @@ def get_phase2_status(session_id):
             'error': 'Internal server error'
         }), 500
 
+@app.route('/api/test-phase2', methods=['POST'])
+def test_phase2():
+    """Manually test Phase 2 music generation"""
+    try:
+        data = request.get_json()
+        session_id = data.get('session_id')
+        
+        if not session_id:
+            return jsonify({
+                'success': False,
+                'error': 'Session ID required'
+            }), 400
+        
+        # Check if preferences exist
+        if redis_client:
+            preferences = session_manager.get_preferences(session_id)
+        else:
+            preferences = session.get(session_id)
+        
+        if not preferences:
+            return jsonify({
+                'success': False,
+                'error': 'No preferences found for this session'
+            }), 404
+        
+        # Manually trigger Phase 2
+        if redis_client:
+            redis_client.publish('phase1_completed', session_id)
+            
+            return jsonify({
+                'success': True,
+                'message': 'Phase 2 triggered manually',
+                'session_id': session_id,
+                'status_endpoint': f'/api/phase2/status/{session_id}',
+                'results_endpoint': f'/api/phase2/results/{session_id}'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Redis required for Phase 2 testing'
+            }), 500
+        
+    except Exception as e:
+        logger.error(f"Error testing Phase 2: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error'
+        }), 500
+        
 @app.route('/api/phase2/results/<session_id>')
 def get_phase2_results(session_id):
     """Get Phase 2 results (generated songs)"""
