@@ -1,9 +1,9 @@
+```javascript
 class QuickMusicVideos {
     constructor() {
         this.form = document.getElementById('preferencesForm');
         this.loadingModal = document.getElementById('loadingModal');
         this.submitBtn = document.getElementById('submitBtn');
-        this.suggestionsModal = document.getElementById('suggestionsModal');
         
         this.init();
     }
@@ -58,6 +58,9 @@ class QuickMusicVideos {
             }
         });
 
+        // Update image count after applying preset
+        updateImageCount();
+
         // Visual feedback
         document.querySelectorAll('.preset-card').forEach(card => {
             card.classList.remove('bg-blue-200');
@@ -69,231 +72,81 @@ class QuickMusicVideos {
         this.form.addEventListener('submit', this.handleSubmit.bind(this));
         
         // AI Enhancement buttons
-        document.getElementById('enhanceVideoBtn').addEventListener('click', this.enhanceVideoPrompt.bind(this));
-        document.getElementById('suggestVideoBtn').addEventListener('click', this.getVideoSuggestions.bind(this));
-        document.getElementById('enhanceMusicBtn').addEventListener('click', this.enhanceMusicPrompt.bind(this));
-        document.getElementById('closeSuggestionsBtn').addEventListener('click', this.closeSuggestionsModal.bind(this));
+        document.getElementById('enhanceImageBtn').addEventListener('click', this.enhanceImagePrompt.bind(this));
+        document.getElementById('suggestImageBtn').addEventListener('click', this.getImageSuggestions.bind(this));
     }
 
-    async enhanceVideoPrompt() {
-        const promptTextarea = document.getElementById('video_prompt');
+    async enhanceImagePrompt() {
+        const promptTextarea = document.getElementById('image_prompt');
         const currentPrompt = promptTextarea.value.trim();
         
         if (!currentPrompt) {
-            alert('Please enter a video prompt first');
+            alert('Please enter an image prompt first');
             return;
         }
 
-        const sessionId = localStorage.getItem('sessionId') || '';
-        
-        this.showButtonLoading('enhanceVideoBtn');
-        
         try {
-            const response = await fetch('/api/enhance-video-prompt', {
+            const response = await fetch('/api/enhance-image-prompt', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
                     prompt: currentPrompt,
-                    session_id: sessionId
+                    session_id: localStorage.getItem('sessionId') || ''
                 })
             });
 
             const data = await response.json();
 
             if (data.success) {
-                this.showEnhancementResults(data, 'video');
+                promptTextarea.value = data.enhanced_prompt;
+                updateCharCount();
+                alert(`Prompt enhanced! (${data.character_count} characters)\n\n${data.technical_notes}`);
             } else {
                 alert('Error: ' + data.error);
             }
         } catch (error) {
-            console.error('Error enhancing video prompt:', error);
+            console.error('Error enhancing image prompt:', error);
             alert('Network error. Please try again.');
-        } finally {
-            this.hideButtonLoading('enhanceVideoBtn', 'Enhance');
         }
     }
 
-    async getVideoSuggestions() {
-        const sessionId = localStorage.getItem('sessionId');
-        
-        this.showButtonLoading('suggestVideoBtn');
-        
+    async getImageSuggestions() {
         try {
-            let requestBody = { session_id: sessionId };
+            const formData = new FormData(this.form);
+            const preferences = {};
+            for (let [key, value] of formData.entries()) {
+                preferences[key] = value;
+            }
             
-            if (!sessionId) {
-                // If no session, include current form data
-                const formData = new FormData(this.form);
-                const preferences = {};
-                for (let [key, value] of formData.entries()) {
-                    preferences[key] = value;
+            const response = await fetch('/api/image-suggestions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    preferences: preferences
+                })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                const suggestions = data.suggestions.map(s => `${s.title}:\n${s.description}`).join('\n\n');
+                const choice = confirm('Image Suggestions:\n\n' + suggestions + '\n\nWould you like to use one of these suggestions?');
+                
+                if (choice && data.suggestions.length > 0) {
+                    document.getElementById('image_prompt').value = data.suggestions[0].description;
+                    updateCharCount();
                 }
-                requestBody.preferences = preferences;
-            }
-            
-            const response = await fetch('/api/video-suggestions', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(requestBody)
-            });
-
-            const data = await response.json();
-
-            if (data.success) {
-                this.showSuggestions(data.suggestions);
             } else {
                 alert('Error: ' + data.error);
             }
         } catch (error) {
-            console.error('Error getting video suggestions:', error);
+            console.error('Error getting image suggestions:', error);
             alert('Network error. Please try again.');
-        } finally {
-            this.hideButtonLoading('suggestVideoBtn', 'Suggest');
         }
-    }
-
-    async enhanceMusicPrompt() {
-        const promptTextarea = document.getElementById('music_prompt');
-        const currentPrompt = promptTextarea.value.trim();
-        
-        if (!currentPrompt) {
-            alert('Please enter a music prompt first');
-            return;
-        }
-
-        const sessionId = localStorage.getItem('sessionId') || '';
-        
-        this.showButtonLoading('enhanceMusicBtn');
-        
-        try {
-            const response = await fetch('/api/enhance-music-prompt', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    prompt: currentPrompt,
-                    session_id: sessionId
-                })
-            });
-
-            const data = await response.json();
-
-            if (data.success) {
-                this.showEnhancementResults(data, 'music');
-            } else {
-                alert('Error: ' + data.error);
-            }
-        } catch (error) {
-            console.error('Error enhancing music prompt:', error);
-            alert('Network error. Please try again.');
-        } finally {
-            this.hideButtonLoading('enhanceMusicBtn', 'Enhance');
-        }
-    }
-
-    showEnhancementResults(data, type) {
-        const content = document.getElementById('suggestionsContent');
-        const promptField = type === 'video' ? 'video_prompt' : 'music_prompt';
-        
-        content.innerHTML = `
-            <div class="space-y-4">
-                <div>
-                    <h4 class="font-semibold mb-2">Enhanced Prompt:</h4>
-                    <div class="bg-gray-50 p-3 rounded border">
-                        <p class="text-sm">${data.enhanced_prompt}</p>
-                        <button class="mt-2 text-blue-600 hover:text-blue-800 text-sm font-medium" onclick="document.getElementById('${promptField}').value = \`${data.enhanced_prompt.replace(/`/g, '\\`')}\`; document.getElementById('suggestionsModal').classList.add('hidden');">
-                            Use This Prompt
-                        </button>
-                    </div>
-                </div>
-                
-                ${data.alternatives && data.alternatives.length > 0 ? `
-                    <div>
-                        <h4 class="font-semibold mb-2">Alternative Suggestions:</h4>
-                        <div class="space-y-2">
-                            ${data.alternatives.map(alt => `
-                                <div class="bg-gray-50 p-3 rounded border">
-                                    <p class="text-sm">${alt}</p>
-                                    <button class="mt-2 text-blue-600 hover:text-blue-800 text-sm font-medium" onclick="document.getElementById('${promptField}').value = \`${alt.replace(/`/g, '\\`')}\`; document.getElementById('suggestionsModal').classList.add('hidden');">
-                                        Use This
-                                    </button>
-                                </div>
-                            `).join('')}
-                        </div>
-                    </div>
-                ` : ''}
-                
-                ${data.technical_notes ? `
-                    <div>
-                        <h4 class="font-semibold mb-2">Technical Notes:</h4>
-                        <p class="text-sm text-gray-600 bg-blue-50 p-3 rounded">${data.technical_notes}</p>
-                    </div>
-                ` : ''}
-                
-                ${data.technical_terms && data.technical_terms.length > 0 ? `
-                    <div>
-                        <h4 class="font-semibold mb-2">Technical Terms:</h4>
-                        <div class="flex flex-wrap gap-2">
-                            ${data.technical_terms.map(term => `
-                                <span class="bg-purple-100 text-purple-800 px-2 py-1 rounded text-xs">${term}</span>
-                            `).join('')}
-                        </div>
-                    </div>
-                ` : ''}
-            </div>
-        `;
-        
-        this.showSuggestionsModal();
-    }
-
-    showSuggestions(suggestions) {
-        const content = document.getElementById('suggestionsContent');
-        
-        content.innerHTML = `
-            <div class="space-y-4">
-                <h4 class="font-semibold mb-2">Video Concept Suggestions:</h4>
-                <div class="space-y-3">
-                    ${suggestions.map(suggestion => `
-                        <div class="bg-gray-50 p-4 rounded border hover:bg-gray-100 transition-colors">
-                            <h5 class="font-medium mb-2 text-green-800">${suggestion.title}</h5>
-                            <p class="text-sm text-gray-700 mb-2">${suggestion.description}</p>
-                            <button class="text-blue-600 hover:text-blue-800 text-sm font-medium" onclick="document.getElementById('video_prompt').value = \`${suggestion.description.replace(/`/g, '\\`')}\`; document.getElementById('suggestionsModal').classList.add('hidden');">
-                                Use This Concept
-                            </button>
-                        </div>
-                    `).join('')}
-                </div>
-            </div>
-        `;
-        
-        this.showSuggestionsModal();
-    }
-
-    showSuggestionsModal() {
-        this.suggestionsModal.classList.remove('hidden');
-        this.suggestionsModal.classList.add('flex');
-    }
-
-    closeSuggestionsModal() {
-        this.suggestionsModal.classList.add('hidden');
-        this.suggestionsModal.classList.remove('flex');
-    }
-
-    showButtonLoading(buttonId) {
-        const button = document.getElementById(buttonId);
-        button.disabled = true;
-        button.innerHTML = '...';
-    }
-
-    hideButtonLoading(buttonId, originalText) {
-        const button = document.getElementById(buttonId);
-        button.disabled = false;
-        button.innerHTML = originalText;
     }
 
     async handleSubmit(event) {
@@ -302,12 +155,10 @@ class QuickMusicVideos {
         const formData = new FormData(this.form);
         const preferences = {};
         
-        // Convert FormData to object
         for (let [key, value] of formData.entries()) {
             preferences[key] = value;
         }
 
-        // Show loading modal
         this.showLoading();
 
         try {
@@ -322,32 +173,17 @@ class QuickMusicVideos {
             const data = await response.json();
 
             if (data.success) {
-                this.handleSuccess(data);
+                localStorage.setItem('sessionId', data.session_id);
+                alert(`Preferences saved! ${data.images_needed} images will be generated for your slideshow.`);
             } else {
-                this.handleError(data.errors || ['Unknown error occurred']);
+                alert('Error: ' + (data.errors || ['Unknown error']).join(', '));
             }
 
         } catch (error) {
-            this.handleError(['Network error. Please try again.']);
+            alert('Network error. Please try again.');
         } finally {
             this.hideLoading();
         }
-    }
-
-    handleSuccess(data) {
-        alert('Preferences saved successfully! Proceeding to music generation...');
-        
-        // Store session ID for next phase
-        localStorage.setItem('sessionId', data.session_id);
-        
-        // Here you would typically redirect to the next phase
-        console.log('Session ID:', data.session_id);
-        console.log('Next phase:', data.next_phase);
-    }
-
-    handleError(errors) {
-        const errorMessage = errors.join('\n');
-        alert('Error: ' + errorMessage);
     }
 
     showLoading() {
@@ -363,7 +199,7 @@ class QuickMusicVideos {
     }
 }
 
-// Initialize the app when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
     new QuickMusicVideos();
 });
+```
