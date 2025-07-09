@@ -11,26 +11,31 @@ class SessionManager:
     def __init__(self, redis_client):
         self.redis_client = redis_client
         self.session_expiry = 3600  # 1 hour in seconds
+        self.in_memory_store = {}  # Fallback for when Redis is not available
     
     def store_preferences(self, session_id: str, preferences: Dict[str, Any]) -> bool:
-        """Store user preferences in Redis"""
+        """Store user preferences in Redis or memory"""
         try:
-            if not self.redis_client:
-                logger.warning("Redis not available, using in-memory storage")
-                return False
-            
             # Add timestamp
             preferences['stored_at'] = datetime.utcnow().isoformat()
             
-            # Store in Redis with expiration
-            key = f"preferences:{session_id}"
-            self.redis_client.setex(
-                key,
-                self.session_expiry,
-                json.dumps(preferences)
-            )
+            if self.redis_client:
+                # Store in Redis with expiration
+                key = f"preferences:{session_id}"
+                self.redis_client.setex(
+                    key,
+                    self.session_expiry,
+                    json.dumps(preferences)
+                )
+                logger.info(f"Preferences stored in Redis for session: {session_id}")
+            else:
+                # Fallback to in-memory storage
+                self.in_memory_store[session_id] = {
+                    'data': preferences,
+                    'expires_at': datetime.utcnow().timestamp() + self.session_expiry
+                }
+                logger.info(f"Preferences stored in memory for session: {session_id}")
             
-            logger.info(f"Preferences stored for session: {session_id}")
             return True
             
         except Exception as e:
@@ -38,19 +43,28 @@ class SessionManager:
             return False
     
     def get_preferences(self, session_id: str) -> Optional[Dict[str, Any]]:
-        """Retrieve user preferences from Redis"""
+        """Retrieve user preferences from Redis or memory"""
         try:
-            if not self.redis_client:
-                logger.warning("Redis not available")
-                return None
-            
-            key = f"preferences:{session_id}"
-            stored_data = self.redis_client.get(key)
-            
-            if stored_data:
-                preferences = json.loads(stored_data)
-                logger.info(f"Preferences retrieved for session: {session_id}")
-                return preferences
+            if self.redis_client:
+                key = f"preferences:{session_id}"
+                stored_data = self.redis_client.get(key)
+                
+                if stored_data:
+                    preferences = json.loads(stored_data)
+                    logger.info(f"Preferences retrieved from Redis for session: {session_id}")
+                    return preferences
+            else:
+                # Fallback to in-memory storage
+                if session_id in self.in_memory_store:
+                    stored_item = self.in_memory_store[session_id]
+                    
+                    # Check if expired
+                    if datetime.utcnow().timestamp() > stored_item['expires_at']:
+                        del self.in_memory_store[session_id]
+                        return None
+                    
+                    logger.info(f"Preferences retrieved from memory for session: {session_id}")
+                    return stored_item['data']
             
             return None
             
@@ -78,14 +92,18 @@ class SessionManager:
     def delete_preferences(self, session_id: str) -> bool:
         """Delete user preferences"""
         try:
-            if not self.redis_client:
+            if self.redis_client:
+                key = f"preferences:{session_id}"
+                result = self.redis_client.delete(key)
+                logger.info(f"Preferences deleted from Redis for session: {session_id}")
+                return result > 0
+            else:
+                # Fallback to in-memory storage
+                if session_id in self.in_memory_store:
+                    del self.in_memory_store[session_id]
+                    logger.info(f"Preferences deleted from memory for session: {session_id}")
+                    return True
                 return False
-            
-            key = f"preferences:{session_id}"
-            result = self.redis_client.delete(key)
-            
-            logger.info(f"Preferences deleted for session: {session_id}")
-            return result > 0
             
         except Exception as e:
             logger.error(f"Error deleting preferences: {e}")
@@ -94,11 +112,15 @@ class SessionManager:
     def extend_session(self, session_id: str) -> bool:
         """Extend session expiry"""
         try:
-            if not self.redis_client:
+            if self.redis_client:
+                key = f"preferences:{session_id}"
+                return self.redis_client.expire(key, self.session_expiry)
+            else:
+                # Fallback to in-memory storage
+                if session_id in self.in_memory_store:
+                    self.in_memory_store[session_id]['expires_at'] = datetime.utcnow().timestamp() + self.session_expiry
+                    return True
                 return False
-            
-            key = f"preferences:{session_id}"
-            return self.redis_client.expire(key, self.session_expiry)
             
         except Exception as e:
             logger.error(f"Error extending session: {e}")
