@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quick Music Videos</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .step-active { @apply bg-blue-600 text-white; }
+        .step-completed { @apply bg-green-600 text-white; }
+        .step-inactive { @apply bg-gray-300 text-gray-600; }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <div class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-gray-800 mb-2">Quick Music Videos</h1>
+            <p class="text-gray-600">Create amazing music videos in minutes</p>
+        </div>
+
+        <!-- Progress Steps -->
+        <div class="flex justify-center mb-8">
+            <div class="flex space-x-4">
+                <div class="step-active rounded-full w-8 h-8 flex items-center justify-center text-sm font-semibold">1</div>
+                <div class="step-inactive rounded-full w-8 h-8 flex items-center justify-center text-sm font-semibold">2</div>
+                <div class="step-inactive rounded-full w-8 h-8 flex items-center justify-center text-sm font-semibold">3</div>
+            </div>
+        </div>
+
+        <!-- Main Form -->
+        <div class="max-w-4xl mx-auto bg-white rounded-lg shadow-lg p-8">
+            <form id="preferencesForm">
+                <!-- Presets Section -->
+                <div class="mb-8">
+                    <h2 class="text-2xl font-semibold mb-4">Quick Start Presets</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4" id="presets">
+                        <!-- Presets will be loaded here -->
+                    </div>
+                </div>
+
+                <!-- Music Preferences -->
+                <div class="mb-8">
+                    <h2 class="text-2xl font-semibold mb-4">Music Preferences</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- Genre -->
+                        <div>
+                            <label class="block text-sm font-medium mb-2">Genre</label>
+                            <select id="genre" name="genre" class="w-full p-3 border rounded-lg">
+                                <option value="">Select Genre</option>
+                                <option value="pop">Pop</option>
+                                <option value="rock">Rock</option>
+                                <option value="electronic">Electronic</option>
+                                <option value="hip-hop">Hip Hop</option>
+                                <option value="jazz">Jazz</option>
+                                <option value="classical">Classical</option>
+                                <option value="lofi">Lo-Fi</option>
+                            </select>
+                        </div>
+
+                        <!-- Mood -->
+                        <div>
+                            <label class="block text-sm font-medium mb-2">Mood</label>
+                            <select id="mood" name="mood" class="w-full p-3 border rounded-lg">
+                                <option value="">Select Mood</option>
+                                <option value="upbeat">Upbeat</option>
+                                <option value="relaxed">Relaxed</option>
+                                <option value="energetic">Energetic</option>
+                                <option value="melancholic">Melancholic</option>
+                                <option value="happy">Happy</option>
+                                <option value="peaceful">Peaceful</option>
+                            </select>
+                        </div>
+
+                        <!-- Tempo -->
+                        <div>
+                            <label class="block text-sm font-medium mb-2">Tempo</label>
+                            <select id="tempo" name="tempo" class="w-full p-3 border rounded-lg">
+                                <option value="">Select Tempo</option>
+                                <option value="slow">Slow</option>
+                                <option value="medium">Medium</option>
+                                <option value="fast">Fast</option>
+                                <option value="very_fast">Very Fast</option>
+                            </select>
+                        </div>
+
+                        <!-- Duration -->
+                        <div>
+                            <label class="block text-sm font-medium mb-2">Duration (seconds)</label>
+                            <input type="number" id="duration" name="duration" min="10" max="300" value="60" class="w-full p-3 border rounded-lg">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Video Preferences -->
+                <div class="mb-8">
+                    <h2 class="text-2xl font-semibold mb-4">Video Preferences</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- Visual Style -->
+                        <div>
+                            <label class="block text-sm font-medium mb-2">Visual Style</label>
+                            <select id="visual_style" name="visual_style" class="w-full p-3 border rounded-lg">
+                                <option value="">Select Style</option>
+                                <option value="modern">Modern</option>
+                                <option value="vintage">Vintage</option>
+                                <option value="minimal">Minimal</option>
+                                <option value="bold">Bold</option>
+                                <option value="abstract">Abstract</option>
+                                <option value="futuristic">Futuristic</option>
+                            </select>
+                        </div>
+
+                        <!-- Color Scheme -->
+                        <div>
+                            <label class="block text-sm font-medium mb-2">Color Scheme</label>
+                            <select id="color_scheme" name="color_scheme" class="w-full p-3 border rounded-lg">
+                                <option value="">Select Colors</option>
+                                <option value="vibrant">Vibrant</option>
+                                <option value="pastel">Pastel</option>
+                                <option value="dark">Dark</option>
+                                <option value="monochrome">Monochrome</option>
+                                <option value="neon">Neon</option>
+                                <option value="warm">Warm</option>
+                                <option value="cool">Cool</option>
+                            </select>
+                        </div>
+
+                        <!-- Resolution -->
+                        <div>
+                            <label class="block text-sm font-medium mb-2">Resolution</label>
+                            <select id="resolution" name="resolution" class="w-full p-3 border rounded-lg">
+                                <option value="1080p">1080p (HD)</option>
+                                <option value="720p">720p</option>
+                                <option value="4k">4K (Ultra HD)</option>
+                            </select>
+                        </div>
+
+                        <!-- Aspect Ratio -->
+                        <div>
+                            <label class="block text-sm font-medium mb-2">Aspect Ratio</label>
+                            <select id="aspect_ratio" name="aspect_ratio" class="w-full p-3 border rounded-lg">
+                                <option value="16:9">16:9 (Widescreen)</option>
+                                <option value="9:16">9:16 (Vertical)</option>
+                                <option value="1:1">1:1 (Square)</option>
+                                <option value="4:3">4:3 (Traditional)</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Project Details -->
+                <div class="mb-8">
+                    <h2 class="text-2xl font-semibold mb-4">Project Details</h2>
+                    <div class="grid grid-cols-1 gap-6">
+                        <div>
+                            <label class="block text-sm font-medium mb-2">Project Name</label>
+                            <input type="text" id="project_name" name="project_name" class="w-full p-3 border rounded-lg" placeholder="Enter project name">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-2">Description</label>
+                            <textarea id="description" name="description" rows="3" class="w-full p-3 border rounded-lg" placeholder="Describe your vision..."></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Submit Button -->
+                <div class="text-center">
+                    <button type="submit" id="submitBtn" class="bg-blue-600 text-white px-8 py-3 rounded-lg text-lg font-semibold hover:bg-blue-700 disabled:opacity-50">
+                        Create Music Video
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Loading Modal -->
+        <div id="loadingModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+            <div class="bg-white p-8 rounded-lg text-center">
+                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                <p class="text-lg font-semibold">Processing your preferences...</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
