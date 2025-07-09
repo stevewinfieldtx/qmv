@@ -19,26 +19,37 @@ CORS(app)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Redis connection for session storage
+# Redis connection for session storage with Railway fix
 try:
-    redis_client = redis.from_url(os.environ.get('REDIS_URL', 'redis://localhost:6379'))
-    redis_client.ping()
-    logger.info("Redis connection successful")
+    redis_url = os.environ.get('REDIS_URL')
+    if redis_url:
+        redis_client = redis.from_url(redis_url)
+        redis_client.ping()
+        logger.info("Redis connection successful")
+    else:
+        logger.warning("REDIS_URL not found, Redis disabled")
+        redis_client = None
 except Exception as e:
     logger.error(f"Redis connection failed: {e}")
     redis_client = None
 
 # Import our modules
-from services.preference_processor import PreferenceProcessor
-from utils.validators import PreferenceValidator
-from utils.session_manager import SessionManager
-from services.gemini_service import GeminiService
-
-# Initialize services
-preference_processor = PreferenceProcessor()
-validator = PreferenceValidator()
-session_manager = SessionManager(redis_client)
-gemini_service = GeminiService()
+try:
+    from services.preference_processor import PreferenceProcessor
+    from utils.validators import PreferenceValidator
+    from utils.session_manager import SessionManager
+    from services.gemini_service import GeminiService
+    
+    # Initialize services
+    preference_processor = PreferenceProcessor()
+    validator = PreferenceValidator()
+    session_manager = SessionManager(redis_client)
+    gemini_service = GeminiService()
+    
+    logger.info("All services initialized successfully")
+except ImportError as e:
+    logger.error(f"Failed to import modules: {e}")
+    raise
 
 @app.route('/')
 def index():
@@ -51,7 +62,8 @@ def health_check():
     return jsonify({
         'status': 'healthy',
         'timestamp': datetime.utcnow().isoformat(),
-        'redis_connected': redis_client is not None
+        'redis_connected': redis_client is not None,
+        'gemini_configured': gemini_service.api_key is not None
     })
 
 @app.route('/api/preferences', methods=['POST'])
@@ -74,8 +86,12 @@ def submit_preferences():
         # Process preferences
         processed_data = preference_processor.process_preferences(data, session_id)
         
-        # Store in session
-        session_manager.store_preferences(session_id, processed_data)
+        # Store in session (works with or without Redis)
+        if redis_client:
+            session_manager.store_preferences(session_id, processed_data)
+        else:
+            # Store in Flask session as fallback
+            session[session_id] = processed_data
         
         # Store session ID in Flask session
         session['session_id'] = session_id
@@ -100,7 +116,13 @@ def submit_preferences():
 def get_preferences(session_id):
     """Retrieve stored preferences"""
     try:
-        preferences = session_manager.get_preferences(session_id)
+        preferences = None
+        
+        if redis_client:
+            preferences = session_manager.get_preferences(session_id)
+        else:
+            # Fallback to Flask session
+            preferences = session.get(session_id)
         
         if not preferences:
             return jsonify({
@@ -146,7 +168,10 @@ def enhance_video_prompt():
         # Get user preferences if session_id provided
         preferences = {}
         if session_id:
-            preferences = session_manager.get_preferences(session_id) or {}
+            if redis_client:
+                preferences = session_manager.get_preferences(session_id) or {}
+            else:
+                preferences = session.get(session_id, {})
         
         # Enhance prompt with Gemini
         result = gemini_service.enhance_video_prompt(user_prompt, preferences)
@@ -171,7 +196,10 @@ def get_video_suggestions():
         # Get user preferences
         preferences = {}
         if session_id:
-            preferences = session_manager.get_preferences(session_id) or {}
+            if redis_client:
+                preferences = session_manager.get_preferences(session_id) or {}
+            else:
+                preferences = session.get(session_id, {})
         elif temp_preferences:
             # Use temporary preferences if no session
             preferences = preference_processor.process_preferences(temp_preferences, 'temp')
@@ -211,7 +239,10 @@ def enhance_music_prompt():
         # Get user preferences
         preferences = {}
         if session_id:
-            preferences = session_manager.get_preferences(session_id) or {}
+            if redis_client:
+                preferences = session_manager.get_preferences(session_id) or {}
+            else:
+                preferences = session.get(session_id, {})
         
         # Enhance prompt
         result = gemini_service.enhance_music_prompt(user_prompt, preferences)
