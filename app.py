@@ -1,3 +1,4 @@
+```python
 from flask import Flask, render_template, request, jsonify, session
 from flask_cors import CORS
 import os
@@ -668,3 +669,4 @@ def enhance_music_prompt():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=os.environ.get('FLASK_ENV') == 'development')
+```
