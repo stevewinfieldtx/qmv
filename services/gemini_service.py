@@ -2,6 +2,8 @@ import google.generativeai as genai
 import os
 import logging
 from typing import Dict, Any, Optional, List
+import json
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -11,17 +13,26 @@ class GeminiService:
     def __init__(self):
         self.api_key = os.environ.get('GEMINI_API_KEY')
         if not self.api_key:
-            logger.error("GEMINI_API_KEY not found in environment variables")
+            logger.warning("GEMINI_API_KEY not found in environment variables")
+            self.model = None
             return
             
-        genai.configure(api_key=self.api_key)
-        self.model = genai.GenerativeModel('gemini-pro')
+        try:
+            genai.configure(api_key=self.api_key)
+            self.model = genai.GenerativeModel('gemini-pro')
+            logger.info("Gemini service initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize Gemini: {e}")
+            self.model = None
         
     def enhance_video_prompt(self, user_input: str, preferences: Dict[str, Any]) -> Dict[str, Any]:
         """Enhance user's video prompt with AI suggestions"""
         try:
-            if not self.api_key:
-                return {'success': False, 'error': 'Gemini API not configured'}
+            if not self.model:
+                return {
+                    'success': False, 
+                    'error': 'Gemini API not configured properly'
+                }
                 
             # Create context from user preferences
             context = self._build_context(preferences)
@@ -38,33 +49,63 @@ class GeminiService:
             - Color Scheme: {preferences.get('video_preferences', {}).get('color_scheme', 'Not specified')}
             - Themes: {', '.join(preferences.get('video_preferences', {}).get('themes', []))}
             
-            Please provide:
-            1. An enhanced version of their prompt (more detailed and creative)
-            2. 3 alternative creative suggestions
-            3. Technical improvements for better AI video generation
+            Please provide an enhanced version of their prompt that is more detailed and creative.
+            Also provide 3 alternative creative suggestions.
+            Include technical improvements for better AI video generation.
             
-            Format your response as JSON with keys: "enhanced_prompt", "alternatives", "technical_notes"
+            Your response should be creative, detailed, and optimized for AI video generation systems.
             """
             
             response = self.model.generate_content(prompt)
             
-            # Parse response (you might need to clean this up if Gemini doesn't return perfect JSON)
-            try:
-                import json
-                result = json.loads(response.text)
-            except:
-                # Fallback if JSON parsing fails
-                result = {
-                    "enhanced_prompt": response.text,
-                    "alternatives": [],
-                    "technical_notes": "AI-enhanced prompt generated"
-                }
+            # Parse response and extract parts
+            response_text = response.text
+            
+            # Try to extract enhanced prompt (usually the first substantial paragraph)
+            lines = response_text.split('\n')
+            enhanced_prompt = ""
+            alternatives = []
+            technical_notes = ""
+            
+            current_section = "enhanced"
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                    
+                if "alternative" in line.lower() or "suggestion" in line.lower():
+                    current_section = "alternatives"
+                    continue
+                elif "technical" in line.lower() or "improvement" in line.lower():
+                    current_section = "technical"
+                    continue
+                
+                if current_section == "enhanced" and not enhanced_prompt:
+                    enhanced_prompt = line
+                elif current_section == "alternatives" and line:
+                    if line.startswith(('-', '•', '1.', '2.', '3.')):
+                        alternatives.append(line.lstrip('-•123. '))
+                    elif len(alternatives) < 3 and len(line) > 20:
+                        alternatives.append(line)
+                elif current_section == "technical":
+                    technical_notes += line + " "
+            
+            # Fallback if parsing fails
+            if not enhanced_prompt:
+                enhanced_prompt = response_text[:200] + "..."
+            
+            if not alternatives:
+                alternatives = [
+                    "Dynamic camera movements with rhythmic editing",
+                    "Abstract visual metaphors matching the music mood",
+                    "Layered visual effects with synchronized transitions"
+                ]
             
             return {
                 'success': True,
-                'enhanced_prompt': result.get('enhanced_prompt', response.text),
-                'alternatives': result.get('alternatives', []),
-                'technical_notes': result.get('technical_notes', ''),
+                'enhanced_prompt': enhanced_prompt,
+                'alternatives': alternatives[:3],
+                'technical_notes': technical_notes.strip() or "AI-enhanced prompt generated for optimal video creation",
                 'original_prompt': user_input
             }
             
@@ -72,70 +113,117 @@ class GeminiService:
             logger.error(f"Error enhancing video prompt: {e}")
             return {
                 'success': False,
-                'error': str(e)
+                'error': f'Gemini API error: {str(e)}'
             }
     
     def generate_video_suggestions(self, preferences: Dict[str, Any]) -> Dict[str, Any]:
         """Generate video concept suggestions based on user preferences"""
         try:
-            if not self.api_key:
-                return {'success': False, 'error': 'Gemini API not configured'}
+            if not self.model:
+                return {
+                    'success': False, 
+                    'error': 'Gemini API not configured properly'
+                }
                 
             context = self._build_context(preferences)
             
             prompt = f"""
-            Based on these music and video preferences, suggest 5 creative video concepts:
+            Based on these music and video preferences, create 5 creative video concepts that would work perfectly together:
             
             Music Details:
-            - Genre: {preferences.get('music_preferences', {}).get('genre', 'Not specified')}
-            - Mood: {preferences.get('music_preferences', {}).get('mood', 'Not specified')}
-            - Tempo: {preferences.get('music_preferences', {}).get('tempo', 'Not specified')}
-            - Duration: {preferences.get('music_preferences', {}).get('duration', 'Not specified')} seconds
+            - Genre: {preferences.get('music_preferences', {}).get('genre', 'Pop')}
+            - Mood: {preferences.get('music_preferences', {}).get('mood', 'Upbeat')}
+            - Tempo: {preferences.get('music_preferences', {}).get('tempo', 'Medium')}
+            - Duration: {preferences.get('music_preferences', {}).get('duration', 60)} seconds
             
             Video Preferences:
-            - Visual Style: {preferences.get('video_preferences', {}).get('visual_style', 'Not specified')}
-            - Color Scheme: {preferences.get('video_preferences', {}).get('color_scheme', 'Not specified')}
-            - Animation Style: {preferences.get('video_preferences', {}).get('animation_style', 'Not specified')}
-            - Resolution: {preferences.get('video_preferences', {}).get('resolution', 'Not specified')}
+            - Visual Style: {preferences.get('video_preferences', {}).get('visual_style', 'Modern')}
+            - Color Scheme: {preferences.get('video_preferences', {}).get('color_scheme', 'Vibrant')}
+            - Animation Style: {preferences.get('video_preferences', {}).get('animation_style', 'Smooth')}
+            - Resolution: {preferences.get('video_preferences', {}).get('resolution', '1080p')}
             
-            Please provide 5 creative, detailed video concepts that would work well with these preferences.
-            Each concept should be 2-3 sentences describing the visual narrative and style.
+            Please provide 5 creative, detailed video concepts. Each concept should be 2-3 sentences describing a unique visual narrative and style that matches these preferences.
             
-            Format as JSON with key "suggestions" containing an array of objects with "title" and "description".
+            Format each suggestion as:
+            Title: [Creative Title]
+            Description: [2-3 sentence description]
+            
+            Make them diverse and creative while staying true to the user's preferences.
             """
             
             response = self.model.generate_content(prompt)
+            response_text = response.text
             
-            try:
-                import json
-                result = json.loads(response.text)
-                suggestions = result.get('suggestions', [])
-            except:
-                # Fallback parsing
+            # Parse suggestions
+            suggestions = []
+            lines = response_text.split('\n')
+            current_title = ""
+            current_description = ""
+            
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                    
+                if line.lower().startswith('title:') or line.lower().startswith('1.') or line.lower().startswith('2.') or line.lower().startswith('3.') or line.lower().startswith('4.') or line.lower().startswith('5.'):
+                    if current_title and current_description:
+                        suggestions.append({
+                            'title': current_title,
+                            'description': current_description
+                        })
+                    current_title = line.replace('Title:', '').replace('1.', '').replace('2.', '').replace('3.', '').replace('4.', '').replace('5.', '').strip()
+                    current_description = ""
+                elif line.lower().startswith('description:'):
+                    current_description = line.replace('Description:', '').strip()
+                elif current_title and not current_description:
+                    current_description = line
+                elif current_title and current_description and len(line) > 20:
+                    current_description += " " + line
+            
+            # Add the last suggestion
+            if current_title and current_description:
+                suggestions.append({
+                    'title': current_title,
+                    'description': current_description
+                })
+            
+            # Fallback if parsing fails
+            if not suggestions:
                 suggestions = [
                     {
-                        "title": "AI-Generated Concept",
-                        "description": response.text
+                        'title': 'Dynamic Visual Journey',
+                        'description': f"A {preferences.get('video_preferences', {}).get('visual_style', 'modern')} video with {preferences.get('video_preferences', {}).get('color_scheme', 'vibrant')} colors that matches the {preferences.get('music_preferences', {}).get('mood', 'upbeat')} mood of your {preferences.get('music_preferences', {}).get('genre', 'pop')} music."
+                    },
+                    {
+                        'title': 'Rhythmic Visual Patterns',
+                        'description': 'Abstract geometric patterns that pulse and flow with the music beat, creating a mesmerizing visual experience.'
+                    },
+                    {
+                        'title': 'Cinematic Storytelling',
+                        'description': 'A narrative-driven video with smooth transitions and professional cinematography that complements your music style.'
                     }
                 ]
             
             return {
                 'success': True,
-                'suggestions': suggestions
+                'suggestions': suggestions[:5]
             }
             
         except Exception as e:
             logger.error(f"Error generating video suggestions: {e}")
             return {
                 'success': False,
-                'error': str(e)
+                'error': f'Gemini API error: {str(e)}'
             }
     
     def enhance_music_prompt(self, user_input: str, preferences: Dict[str, Any]) -> Dict[str, Any]:
         """Enhance user's music prompt for better Suno generation"""
         try:
-            if not self.api_key:
-                return {'success': False, 'error': 'Gemini API not configured'}
+            if not self.model:
+                return {
+                    'success': False, 
+                    'error': 'Gemini API not configured properly'
+                }
                 
             music_prefs = preferences.get('music_preferences', {})
             
@@ -156,26 +244,60 @@ class GeminiService:
             2. Technical music terms that would improve the output
             3. 3 alternative approaches for the same concept
             
-            Format as JSON with keys: "enhanced_prompt", "technical_terms", "alternatives"
+            Make the enhanced prompt detailed, using proper music terminology and production language.
             """
             
             response = self.model.generate_content(prompt)
+            response_text = response.text
             
-            try:
-                import json
-                result = json.loads(response.text)
-            except:
-                result = {
-                    "enhanced_prompt": response.text,
-                    "technical_terms": [],
-                    "alternatives": []
-                }
+            # Parse the response
+            lines = response_text.split('\n')
+            enhanced_prompt = ""
+            technical_terms = []
+            alternatives = []
+            
+            current_section = "enhanced"
+            
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                    
+                if "technical" in line.lower() or "terms" in line.lower():
+                    current_section = "technical"
+                    continue
+                elif "alternative" in line.lower() or "approach" in line.lower():
+                    current_section = "alternatives"
+                    continue
+                
+                if current_section == "enhanced" and not enhanced_prompt:
+                    if len(line) > 20 and not line.startswith(('1.', '2.', '3.')):
+                        enhanced_prompt = line
+                elif current_section == "technical":
+                    if line.startswith(('-', '•')) or len(line) > 10:
+                        technical_terms.append(line.lstrip('-• '))
+                elif current_section == "alternatives":
+                    if line.startswith(('-', '•', '1.', '2.', '3.')):
+                        alternatives.append(line.lstrip('-•123. '))
+                    elif len(alternatives) < 3 and len(line) > 20:
+                        alternatives.append(line)
+            
+            # Fallback if parsing fails
+            if not enhanced_prompt:
+                enhanced_prompt = response_text[:150] + "..."
+            
+            if not alternatives:
+                alternatives = [
+                    f"Focus on {music_prefs.get('genre', 'modern')} production with {music_prefs.get('mood', 'dynamic')} energy",
+                    f"Emphasize {music_prefs.get('tempo', 'medium')} tempo with rich instrumentation",
+                    f"Create atmospheric {music_prefs.get('genre', 'contemporary')} soundscape"
+                ]
             
             return {
                 'success': True,
-                'enhanced_prompt': result.get('enhanced_prompt', response.text),
-                'technical_terms': result.get('technical_terms', []),
-                'alternatives': result.get('alternatives', []),
+                'enhanced_prompt': enhanced_prompt,
+                'technical_terms': technical_terms[:5],
+                'alternatives': alternatives[:3],
                 'original_prompt': user_input
             }
             
@@ -183,7 +305,7 @@ class GeminiService:
             logger.error(f"Error enhancing music prompt: {e}")
             return {
                 'success': False,
-                'error': str(e)
+                'error': f'Gemini API error: {str(e)}'
             }
     
     def _build_context(self, preferences: Dict[str, Any]) -> str:
