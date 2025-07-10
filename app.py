@@ -529,6 +529,106 @@ def enhance_music_prompt():
             'error': 'Internal server error'
         }), 500
 
+ @app.route('/api/debug/sessions')
+def debug_sessions():
+    """Debug route to view all saved sessions"""
+    try:
+        if not redis_client:
+            return jsonify({
+                'success': False,
+                'error': 'Redis not available',
+                'in_memory_sessions': list(session_manager.in_memory_store.keys())
+            })
+        
+        # Get all Redis keys for preferences
+        keys = redis_client.keys('preferences:*')
+        sessions = {}
+        
+        for key in keys:
+            session_id = key.decode('utf-8').replace('preferences:', '')
+            data = redis_client.get(key)
+            if data:
+                sessions[session_id] = json.loads(data)
+        
+        return jsonify({
+            'success': True,
+            'total_sessions': len(sessions),
+            'sessions': sessions,
+            'storage_type': 'redis'
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
+
+@app.route('/api/debug/redis-test')
+def test_redis():
+    """Test Redis connection and basic operations"""
+    try:
+        if not redis_client:
+            return jsonify({
+                'success': False,
+                'error': 'Redis client not initialized'
+            })
+        
+        # Test basic Redis operations
+        test_key = 'test_key'
+        test_value = 'test_value'
+        
+        # Set a value
+        redis_client.setex(test_key, 60, test_value)
+        
+        # Get the value
+        retrieved = redis_client.get(test_key)
+        
+        # Clean up
+        redis_client.delete(test_key)
+        
+        return jsonify({
+            'success': True,
+            'redis_working': retrieved.decode('utf-8') == test_value,
+            'redis_info': {
+                'connected': True,
+                'url_set': bool(os.environ.get('REDIS_URL'))
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'redis_url_set': bool(os.environ.get('REDIS_URL'))
+        })
+
+@app.route('/api/debug/clear-sessions')
+def clear_sessions():
+    """Clear all stored sessions (for testing)"""
+    try:
+        if not redis_client:
+            session_manager.in_memory_store.clear()
+            return jsonify({
+                'success': True,
+                'message': 'In-memory sessions cleared'
+            })
+        
+        # Clear Redis sessions
+        keys = redis_client.keys('preferences:*')
+        if keys:
+            redis_client.delete(*keys)
+            
+        return jsonify({
+            'success': True,
+            'message': f'Cleared {len(keys)} sessions from Redis'
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })       
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=os.environ.get('FLASK_ENV') == 'development')
