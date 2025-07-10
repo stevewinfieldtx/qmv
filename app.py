@@ -591,7 +591,7 @@ def test_redis():
             'redis_working': retrieved.decode('utf-8') == test_value,
             'redis_info': {
                 'connected': True,
-                'url_set': bool(os.environ.get('REDIS_URL'))
+                'url': os.environ.get('REDIS_URL', 'Not set')[:20] + '...' if os.environ.get('REDIS_URL') else 'Not set'
             }
         })
         
@@ -601,33 +601,6 @@ def test_redis():
             'error': str(e),
             'redis_url_set': bool(os.environ.get('REDIS_URL'))
         })
-
-@app.route('/api/debug/clear-sessions')
-def clear_sessions():
-    """Clear all stored sessions (for testing)"""
-    try:
-        if not redis_client:
-            session_manager.in_memory_store.clear()
-            return jsonify({
-                'success': True,
-                'message': 'In-memory sessions cleared'
-            })
-        
-        # Clear Redis sessions
-        keys = redis_client.keys('preferences:*')
-        if keys:
-            redis_client.delete(*keys)
-            
-        return jsonify({
-            'success': True,
-            'message': f'Cleared {len(keys)} sessions from Redis'
-        })
-        
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        })       
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
