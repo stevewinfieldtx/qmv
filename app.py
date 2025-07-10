@@ -8,7 +8,6 @@ import redis
 from dotenv import load_dotenv
 import logging
 from typing import Dict, Any, Optional, List
-import validators
 
 # Load environment variables
 load_dotenv()
@@ -58,18 +57,17 @@ except Exception as e:
     logger.error(f"Gemini initialization failed: {e}")
     gemini_model = None
 
-# ============== CLASSES ==============
+# ============== CLASSES (SAME AS BEFORE) ==============
 
 class SessionManager:
     """Manage user sessions and preference storage"""
     
     def __init__(self, redis_client):
         self.redis_client = redis_client
-        self.session_expiry = 3600  # 1 hour in seconds
+        self.session_expiry = 3600
         self.in_memory_store = {}
     
     def store_preferences(self, session_id: str, preferences: Dict[str, Any]) -> bool:
-        """Store user preferences in Redis or memory"""
         try:
             preferences['stored_at'] = datetime.utcnow().isoformat()
             
@@ -90,7 +88,6 @@ class SessionManager:
             return False
     
     def get_preferences(self, session_id: str) -> Optional[Dict[str, Any]]:
-        """Retrieve user preferences from Redis or memory"""
         try:
             if self.redis_client:
                 key = f"preferences:{session_id}"
@@ -110,24 +107,19 @@ class SessionManager:
             return None
 
 class PreferenceValidator:
-    """Validate user input preferences"""
-    
     def __init__(self):
         self.valid_genres = ['pop', 'rock', 'electronic', 'hip-hop', 'jazz', 'classical', 'country', 'folk', 'reggae', 'blues', 'funk', 'lofi', 'ambient']
         self.valid_moods = ['upbeat', 'relaxed', 'energetic', 'melancholic', 'happy', 'sad', 'angry', 'peaceful', 'dramatic', 'mysterious', 'romantic']
         self.valid_tempos = ['slow', 'medium', 'fast', 'very_fast']
-        self.valid_visual_styles = ['modern', 'vintage', 'minimal', 'bold', 'abstract', 'realistic', 'cartoon', 'futuristic', 'retro']
-        self.valid_color_schemes = ['vibrant', 'pastel', 'dark', 'monochrome', 'neon', 'warm', 'cool', 'earth_tones', 'rainbow']
     
     def validate_preferences(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Validate all user preferences"""
         errors = []
         
         if not data:
             errors.append("No data provided")
             return {'valid': False, 'errors': errors}
         
-        # Duration validation
+        # Basic validation
         duration = data.get('duration')
         if duration:
             try:
@@ -137,21 +129,9 @@ class PreferenceValidator:
             except (ValueError, TypeError):
                 errors.append("Duration must be a valid number")
         
-        # Project name validation
-        project_name = data.get('project_name', '')
-        if project_name and len(project_name) > 100:
-            errors.append("Project name must be less than 100 characters")
-        
-        # Image prompt validation
-        image_prompt = data.get('image_prompt', '')
-        if image_prompt and len(image_prompt) > 1500:
-            errors.append("Image prompt must be less than 1500 characters")
-        
         return {'valid': len(errors) == 0, 'errors': errors}
 
 class PreferenceProcessor:
-    """Process and structure user preferences for music generation"""
-    
     def __init__(self):
         self.presets = {
             'energetic_pop': {
@@ -165,16 +145,10 @@ class PreferenceProcessor:
             'rock_anthem': {
                 'genre': 'rock', 'mood': 'powerful', 'tempo': 'fast', 'energy_level': 'high',
                 'visual_style': 'bold', 'color_scheme': 'dark'
-            },
-            'ambient_electronic': {
-                'genre': 'electronic', 'mood': 'atmospheric', 'tempo': 'medium', 'energy_level': 'medium',
-                'visual_style': 'futuristic', 'color_scheme': 'neon'
             }
         }
     
     def process_preferences(self, raw_data: Dict[str, Any], session_id: str) -> Dict[str, Any]:
-        """Process raw user input into structured preferences"""
-        
         return {
             'session_id': session_id,
             'timestamp': datetime.utcnow().isoformat(),
@@ -201,26 +175,286 @@ class PreferenceProcessor:
         }
     
     def get_presets(self) -> Dict[str, Any]:
-        """Return available presets"""
         return self.presets
 
 class GeminiService:
-    """Service for interacting with Google Gemini AI"""
-    
     def __init__(self, model):
         self.model = model
     
     def enhance_image_prompt(self, user_input: str, preferences: Dict[str, Any]) -> Dict[str, Any]:
-        """Enhance user's image prompt with AI suggestions - REALISTIC & UNDER 1500 CHARS"""
         try:
             if not self.model:
                 return {'success': False, 'error': 'Gemini API not configured'}
             
-            # Get context from preferences
             music_prefs = preferences.get('music_preferences', {})
             image_prefs = preferences.get('image_preferences', {})
             
             prompt = f"""
-            Create a realistic image prompt for AI image generation for a music slideshow.
+            Create a realistic image prompt for AI image generation.
             
             User's idea: "{user_input}"
+            Music: {music_prefs.get('genre', 'pop')} - {music_prefs.get('mood', 'upbeat')}
+            Style: {image_prefs.get('visual_style', 'modern')}
+            Colors: {image_prefs.get('color_scheme', 'vibrant')}
+            
+            Create a realistic, specific image prompt under 1500 characters that describes something real and achievable.
+            """
+            
+            response = self.model.generate_content(prompt)
+            enhanced_prompt = response.text.strip()
+            
+            if len(enhanced_prompt) > 1500:
+                enhanced_prompt = enhanced_prompt[:1497] + "..."
+            
+            return {
+                'success': True,
+                'enhanced_prompt': enhanced_prompt,
+                'alternatives': [
+                    f"Portrait version: {user_input} with {image_prefs.get('color_scheme', 'vibrant')} lighting",
+                    f"Landscape version: {user_input} in {image_prefs.get('visual_style', 'modern')} setting",
+                    f"Close-up version: detailed {user_input} with artistic composition"
+                ],
+                'technical_notes': "Optimized for AI image generation",
+                'original_prompt': user_input,
+                'character_count': len(enhanced_prompt)
+            }
+            
+        except Exception as e:
+            logger.error(f"Gemini error: {e}")
+            return {'success': False, 'error': f'Gemini API error: {str(e)}'}
+    
+    def generate_image_suggestions(self, preferences: Dict[str, Any]) -> Dict[str, Any]:
+        try:
+            suggestions = [
+                {
+                    'title': 'Urban Portrait',
+                    'description': 'A person in modern clothing against a city backdrop with vibrant lighting.'
+                },
+                {
+                    'title': 'Nature Scene',
+                    'description': 'Beautiful natural landscape with colorful sunset lighting.'
+                },
+                {
+                    'title': 'Studio Setup',
+                    'description': 'Musical instruments in a modern studio with dynamic lighting.'
+                }
+            ]
+            
+            return {'success': True, 'suggestions': suggestions}
+            
+        except Exception as e:
+            logger.error(f"Error generating suggestions: {e}")
+            return {'success': False, 'error': str(e)}
+
+# Initialize services
+session_manager = SessionManager(redis_client)
+validator = PreferenceValidator()
+processor = PreferenceProcessor()
+gemini_service = GeminiService(gemini_model)
+
+# ============== ROUTES ==============
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+@app.route('/api/health')
+def health_check():
+    return jsonify({
+        'status': 'healthy',
+        'timestamp': datetime.utcnow().isoformat(),
+        'redis_connected': redis_client is not None,
+        'gemini_configured': gemini_model is not None
+    })
+
+@app.route('/api/preferences', methods=['POST'])
+def submit_preferences():
+    try:
+        data = request.get_json()
+        
+        validation_result = validator.validate_preferences(data)
+        if not validation_result['valid']:
+            return jsonify({
+                'success': False,
+                'errors': validation_result['errors']
+            }), 400
+        
+        session_id = str(uuid.uuid4())
+        processed_data = processor.process_preferences(data, session_id)
+        
+        if redis_client:
+            session_manager.store_preferences(session_id, processed_data)
+        else:
+            session[session_id] = processed_data
+        
+        session['session_id'] = session_id
+        
+        logger.info(f"Preferences stored for session: {session_id}")
+        
+        # For now, just store the trigger in Redis (no Celery)
+        if redis_client:
+            redis_client.publish('phase1_completed', session_id)
+            logger.info(f"Phase 1 completed signal sent for session: {session_id}")
+        
+        return jsonify({
+            'success': True,
+            'session_id': session_id,
+            'message': 'Preferences saved successfully - Phase 2 will be triggered',
+            'next_phase': 'music_generation'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in submit_preferences: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error'
+        }), 500
+
+@app.route('/api/preferences/<session_id>', methods=['GET'])
+def get_preferences(session_id):
+    try:
+        preferences = None
+        
+        if redis_client:
+            preferences = session_manager.get_preferences(session_id)
+        else:
+            preferences = session.get(session_id)
+        
+        if not preferences:
+            return jsonify({
+                'success': False,
+                'error': 'Session not found'
+            }), 404
+        
+        return jsonify({
+            'success': True,
+            'preferences': preferences
+        })
+        
+    except Exception as e:
+        logger.error(f"Error retrieving preferences: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error'
+        }), 500
+
+@app.route('/api/presets')
+def get_presets():
+    presets = processor.get_presets()
+    return jsonify({
+        'success': True,
+        'presets': presets
+    })
+
+@app.route('/api/enhance-image-prompt', methods=['POST'])
+def enhance_image_prompt():
+    try:
+        data = request.get_json()
+        user_prompt = data.get('prompt', '')
+        session_id = data.get('session_id', '')
+        
+        if not user_prompt:
+            return jsonify({
+                'success': False,
+                'error': 'No prompt provided'
+            }), 400
+        
+        preferences = {}
+        if session_id:
+            if redis_client:
+                preferences = session_manager.get_preferences(session_id) or {}
+            else:
+                preferences = session.get(session_id, {})
+        
+        result = gemini_service.enhance_image_prompt(user_prompt, preferences)
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Error in enhance_image_prompt: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error'
+        }), 500
+
+@app.route('/api/image-suggestions', methods=['POST'])
+def get_image_suggestions():
+    try:
+        data = request.get_json()
+        session_id = data.get('session_id', '')
+        temp_preferences = data.get('preferences', {})
+        
+        preferences = {}
+        if session_id:
+            if redis_client:
+                preferences = session_manager.get_preferences(session_id) or {}
+            else:
+                preferences = session.get(session_id, {})
+        elif temp_preferences:
+            preferences = processor.process_preferences(temp_preferences, 'temp')
+        
+        if not preferences:
+            return jsonify({
+                'success': False,
+                'error': 'No preferences available'
+            }), 400
+        
+        result = gemini_service.generate_image_suggestions(preferences)
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Error in get_image_suggestions: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error'
+        }), 500
+
+@app.route('/api/enhance-music-prompt', methods=['POST'])
+def enhance_music_prompt():
+    try:
+        data = request.get_json()
+        user_prompt = data.get('prompt', '')
+        session_id = data.get('session_id', '')
+        
+        if not user_prompt:
+            return jsonify({
+                'success': False,
+                'error': 'No prompt provided'
+            }), 400
+        
+        preferences = {}
+        if session_id:
+            if redis_client:
+                preferences = session_manager.get_preferences(session_id) or {}
+            else:
+                preferences = session.get(session_id, {})
+        
+        music_prefs = preferences.get('music_preferences', {})
+        
+        enhanced_prompt = f"Create a {music_prefs.get('genre', 'pop')} song with {music_prefs.get('mood', 'upbeat')} mood and {music_prefs.get('tempo', 'medium')} tempo. {user_prompt}"
+        
+        if len(enhanced_prompt) > 500:
+            enhanced_prompt = enhanced_prompt[:497] + "..."
+        
+        return jsonify({
+            'success': True,
+            'enhanced_prompt': enhanced_prompt,
+            'alternatives': [
+                f"Focus on {music_prefs.get('tempo', 'medium')} tempo: {user_prompt}",
+                f"Emphasize {music_prefs.get('energy_level', 'medium')} energy: {user_prompt}",
+                f"Modern production style: {user_prompt}"
+            ],
+            'technical_notes': f"Optimized for {music_prefs.get('duration', 60)} second duration",
+            'original_prompt': user_prompt,
+            'character_count': len(enhanced_prompt)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in enhance_music_prompt: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error'
+        }), 500
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=os.environ.get('FLASK_ENV') == 'development')
