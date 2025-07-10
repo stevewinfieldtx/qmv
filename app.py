@@ -266,7 +266,81 @@ def health_check():
         'redis_connected': redis_client is not None,
         'gemini_configured': gemini_model is not None
     })
+# Add these routes to your existing app.py
 
+@app.route('/api/debug/sessions')
+def debug_sessions():
+    """Debug route to view all saved sessions"""
+    try:
+        if not redis_client:
+            return jsonify({
+                'success': False,
+                'error': 'Redis not available',
+                'in_memory_sessions': list(session_manager.in_memory_store.keys())
+            })
+        
+        # Get all Redis keys for preferences
+        keys = redis_client.keys('preferences:*')
+        sessions = {}
+        
+        for key in keys:
+            session_id = key.decode('utf-8').replace('preferences:', '')
+            data = redis_client.get(key)
+            if data:
+                sessions[session_id] = json.loads(data)
+        
+        return jsonify({
+            'success': True,
+            'total_sessions': len(sessions),
+            'sessions': sessions,
+            'storage_type': 'redis'
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
+
+@app.route('/api/debug/redis-test')
+def test_redis():
+    """Test Redis connection and basic operations"""
+    try:
+        if not redis_client:
+            return jsonify({
+                'success': False,
+                'error': 'Redis client not initialized'
+            })
+        
+        # Test basic Redis operations
+        test_key = 'test_key'
+        test_value = 'test_value'
+        
+        # Set a value
+        redis_client.setex(test_key, 60, test_value)
+        
+        # Get the value
+        retrieved = redis_client.get(test_key)
+        
+        # Clean up
+        redis_client.delete(test_key)
+        
+        return jsonify({
+            'success': True,
+            'redis_working': retrieved.decode('utf-8') == test_value,
+            'redis_info': {
+                'connected': True,
+                'url': os.environ.get('REDIS_URL', 'Not set')[:20] + '...' if os.environ.get('REDIS_URL') else 'Not set'
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'redis_url_set': bool(os.environ.get('REDIS_URL'))
+        })
+        
 @app.route('/api/preferences', methods=['POST'])
 def submit_preferences():
     try:
