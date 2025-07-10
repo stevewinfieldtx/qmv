@@ -1,4 +1,3 @@
-```python
 #!/usr/bin/env python3
 """
 Celery worker for background tasks
@@ -22,4 +21,3 @@ if __name__ == '__main__':
         '--concurrency=2',
         '--queues=music_generation,celery'
     ])
-```
