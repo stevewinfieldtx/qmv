@@ -529,7 +529,7 @@ def enhance_music_prompt():
             'error': 'Internal server error'
         }), 500
 
- @app.route('/api/debug/sessions')
+@app.route('/api/debug/sessions')
 def debug_sessions():
     """Debug route to view all saved sessions"""
     try:
