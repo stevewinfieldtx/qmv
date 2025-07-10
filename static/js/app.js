@@ -1,4 +1,3 @@
-```javascript
 class QuickMusicVideos {
     constructor() {
         this.form = document.getElementById('preferencesForm');
@@ -58,8 +57,9 @@ class QuickMusicVideos {
             }
         });
 
-        // Update image count after applying preset
-        updateImageCount();
+        // Update character counts after applying preset
+        updateMusicCharCount();
+        updateImageCharCount();
 
         // Visual feedback
         document.querySelectorAll('.preset-card').forEach(card => {
@@ -74,6 +74,7 @@ class QuickMusicVideos {
         // AI Enhancement buttons
         document.getElementById('enhanceImageBtn').addEventListener('click', this.enhanceImagePrompt.bind(this));
         document.getElementById('suggestImageBtn').addEventListener('click', this.getImageSuggestions.bind(this));
+        document.getElementById('enhanceMusicBtn').addEventListener('click', this.enhanceMusicPrompt.bind(this));
     }
 
     async enhanceImagePrompt() {
@@ -84,6 +85,8 @@ class QuickMusicVideos {
             alert('Please enter an image prompt first');
             return;
         }
+
+        this.showButtonLoading('enhanceImageBtn');
 
         try {
             const response = await fetch('/api/enhance-image-prompt', {
@@ -101,7 +104,7 @@ class QuickMusicVideos {
 
             if (data.success) {
                 promptTextarea.value = data.enhanced_prompt;
-                updateCharCount();
+                updateImageCharCount();
                 alert(`Prompt enhanced! (${data.character_count} characters)\n\n${data.technical_notes}`);
             } else {
                 alert('Error: ' + data.error);
@@ -109,10 +112,14 @@ class QuickMusicVideos {
         } catch (error) {
             console.error('Error enhancing image prompt:', error);
             alert('Network error. Please try again.');
+        } finally {
+            this.hideButtonLoading('enhanceImageBtn', 'Enhance');
         }
     }
 
     async getImageSuggestions() {
+        this.showButtonLoading('suggestImageBtn');
+
         try {
             const formData = new FormData(this.form);
             const preferences = {};
@@ -133,20 +140,99 @@ class QuickMusicVideos {
             const data = await response.json();
 
             if (data.success) {
-                const suggestions = data.suggestions.map(s => `${s.title}:\n${s.description}`).join('\n\n');
-                const choice = confirm('Image Suggestions:\n\n' + suggestions + '\n\nWould you like to use one of these suggestions?');
-                
-                if (choice && data.suggestions.length > 0) {
-                    document.getElementById('image_prompt').value = data.suggestions[0].description;
-                    updateCharCount();
-                }
+                this.showSuggestionsModal(data.suggestions, 'image');
             } else {
                 alert('Error: ' + data.error);
             }
         } catch (error) {
             console.error('Error getting image suggestions:', error);
             alert('Network error. Please try again.');
+        } finally {
+            this.hideButtonLoading('suggestImageBtn', 'Suggest');
         }
+    }
+
+    async enhanceMusicPrompt() {
+        const promptTextarea = document.getElementById('music_prompt');
+        const currentPrompt = promptTextarea.value.trim();
+        
+        if (!currentPrompt) {
+            alert('Please enter a music prompt first');
+            return;
+        }
+
+        this.showButtonLoading('enhanceMusicBtn');
+
+        try {
+            const response = await fetch('/api/enhance-music-prompt', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    prompt: currentPrompt,
+                    session_id: localStorage.getItem('sessionId') || ''
+                })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                promptTextarea.value = data.enhanced_prompt;
+                updateMusicCharCount();
+                alert(`Music prompt enhanced! (${data.character_count} characters)\n\n${data.technical_notes}`);
+            } else {
+                alert('Error: ' + data.error);
+            }
+        } catch (error) {
+            console.error('Error enhancing music prompt:', error);
+            alert('Network error. Please try again.');
+        } finally {
+            this.hideButtonLoading('enhanceMusicBtn', 'Enhance');
+        }
+    }
+
+    showSuggestionsModal(suggestions, type) {
+        let suggestionText = '';
+        let promptField = type === 'image' ? 'image_prompt' : 'music_prompt';
+        
+        if (type === 'image') {
+            suggestionText = 'Image Suggestions:\n\n';
+            suggestions.forEach((s, i) => {
+                suggestionText += `${i + 1}. ${s.title}:\n${s.description}\n\n`;
+            });
+        } else {
+            suggestionText = 'Music Suggestions:\n\n';
+            suggestions.forEach((s, i) => {
+                suggestionText += `${i + 1}. ${s}\n\n`;
+            });
+        }
+        
+        const choice = confirm(suggestionText + '\nWould you like to use the first suggestion?');
+        
+        if (choice && suggestions.length > 0) {
+            const firstSuggestion = type === 'image' ? suggestions[0].description : suggestions[0];
+            document.getElementById(promptField).value = firstSuggestion;
+            
+            // Update character count
+            if (type === 'image') {
+                updateImageCharCount();
+            } else {
+                updateMusicCharCount();
+            }
+        }
+    }
+
+    showButtonLoading(buttonId) {
+        const button = document.getElementById(buttonId);
+        button.disabled = true;
+        button.innerHTML = '...';
+    }
+
+    hideButtonLoading(buttonId, originalText) {
+        const button = document.getElementById(buttonId);
+        button.disabled = false;
+        button.innerHTML = originalText;
     }
 
     async handleSubmit(event) {
@@ -174,7 +260,7 @@ class QuickMusicVideos {
 
             if (data.success) {
                 localStorage.setItem('sessionId', data.session_id);
-                alert(`Preferences saved! ${data.images_needed} images will be generated for your slideshow.`);
+                alert('Preferences saved! Music generation started. You will receive 2 song variations.');
             } else {
                 alert('Error: ' + (data.errors || ['Unknown error']).join(', '));
             }
@@ -199,7 +285,20 @@ class QuickMusicVideos {
     }
 }
 
+// Global functions for the HTML onkeyup events
+function updateMusicCharCount() {
+    const prompt = document.getElementById('music_prompt').value;
+    document.getElementById('musicCharCount').textContent = prompt.length;
+}
+
+function updateImageCharCount() {
+    const prompt = document.getElementById('image_prompt').value;
+    document.getElementById('imageCharCount').textContent = prompt.length;
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     new QuickMusicVideos();
+    // Initialize character counts
+    updateMusicCharCount();
+    updateImageCharCount();
 });
-```
