@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 from google.cloud import storage
 import uuid
-from celery import Celery
+from celery_app import celery_app
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -17,18 +17,6 @@ logger = logging.getLogger(__name__)
 # Redis connection
 redis_client = redis.from_url(os.environ.get('REDIS_URL', 'redis://localhost:6379'))
 
-# Celery configuration
-celery_app = Celery('phase2_worker')
-celery_app.conf.update(
-    broker_url=os.environ.get('REDIS_URL', 'redis://localhost:6379'),
-    result_backend=os.environ.get('REDIS_URL', 'redis://localhost:6379'),
-    task_serializer='json',
-    accept_content=['json'],
-    result_serializer='json',
-    timezone='UTC',
-    enable_utc=True,
-)
-
 class SunoService:
     """Service for generating music using Suno API"""
     
@@ -36,10 +24,11 @@ class SunoService:
         self.api_key = os.environ.get('SUNO_API_KEY')
         self.base_url = 'https://api.suno.ai/v1'
         self.session = requests.Session()
-        self.session.headers.update({
-            'Authorization': f'Bearer {self.api_key}',
-            'Content-Type': 'application/json'
-        })
+        if self.api_key:
+            self.session.headers.update({
+                'Authorization': f'Bearer {self.api_key}',
+                'Content-Type': 'application/json'
+            })
     
     def create_music_tags(self, preferences: Dict[str, Any]) -> str:
         """Create music tags based on user preferences"""
@@ -85,6 +74,12 @@ class SunoService:
     def generate_music(self, preferences: Dict[str, Any], session_id: str) -> Dict[str, Any]:
         """Generate music using Suno API"""
         try:
+            if not self.api_key:
+                return {
+                    'success': False,
+                    'error': 'Suno API key not configured'
+                }
+            
             music_prefs = preferences.get('music_preferences', {})
             general_prefs = preferences.get('general_preferences', {})
             
@@ -108,7 +103,7 @@ class SunoService:
             logger.info(f"Generating music for session {session_id} with tags: {tags}")
             
             # Make request to Suno API
-            response = self.session.post(f'{self.base_url}/generate', json=suno_request)
+            response = self.session.post(f'{self.base_url}/generate', json=suno_request, timeout=120)
             
             if response.status_code == 200:
                 suno_response = response.json()
@@ -148,7 +143,7 @@ class SunoService:
                 logger.error(f"Suno API error: {response.status_code} - {response.text}")
                 return {
                     'success': False,
-                    'error': f'Suno API error: {response.status_code}'
+                    'error': f'Suno API error: {response.status_code} - {response.text}'
                 }
                 
         except Exception as e:
@@ -163,12 +158,28 @@ class GCSService:
     
     def __init__(self):
         self.bucket_name = os.environ.get('GCS_BUCKET_NAME')
-        self.client = storage.Client()
-        self.bucket = self.client.bucket(self.bucket_name)
+        if self.bucket_name:
+            try:
+                self.client = storage.Client()
+                self.bucket = self.client.bucket(self.bucket_name)
+            except Exception as e:
+                logger.error(f"GCS initialization failed: {e}")
+                self.client = None
+                self.bucket = None
+        else:
+            logger.warning("GCS_BUCKET_NAME not configured")
+            self.client = None
+            self.bucket = None
     
     def upload_audio_file(self, audio_url: str, session_id: str, song_index: int, song_id: str) -> Dict[str, Any]:
         """Download audio from Suno URL and upload to GCS"""
         try:
+            if not self.bucket:
+                return {
+                    'success': False,
+                    'error': 'GCS not configured'
+                }
+            
             # Download audio from Suno URL
             response = requests.get(audio_url, stream=True, timeout=120)
             response.raise_for_status()
@@ -204,6 +215,12 @@ class GCSService:
     def store_song_metadata(self, session_id: str, song_data: Dict[str, Any]) -> Dict[str, Any]:
         """Store song metadata as JSON in GCS"""
         try:
+            if not self.bucket:
+                return {
+                    'success': False,
+                    'error': 'GCS not configured'
+                }
+            
             filename = f"metadata/{session_id}/song_{song_data['song_id']}_metadata.json"
             
             blob = self.bucket.blob(filename)
@@ -229,10 +246,12 @@ class GCSService:
 suno_service = SunoService()
 gcs_service = GCSService()
 
-@celery_app.task(bind=True, max_retries=3)
+@celery_app.task(bind=True, max_retries=3, default_retry_delay=60)
 def process_music_generation(self, session_id: str):
     """Celery task to process music generation (Phase 2)"""
     try:
+        logger.info(f"Starting music generation for session {session_id}")
+        
         # Get preferences from Redis
         preferences_key = f"preferences:{session_id}"
         preferences_data = redis_client.get(preferences_key)
@@ -253,7 +272,6 @@ def process_music_generation(self, session_id: str):
         }))
         
         # Generate music with Suno
-        logger.info(f"Starting music generation for session {session_id}")
         music_result = suno_service.generate_music(preferences, session_id)
         
         if not music_result['success']:
@@ -300,7 +318,9 @@ def process_music_generation(self, session_id: str):
                 stored_songs.append(song)
                 logger.info(f"Stored song {i+1} ({song['duration']}s) for session {session_id}")
             else:
-                logger.error(f"Failed to store song {i+1}: {gcs_result['error']}")
+                logger.warning(f"Failed to store song {i+1} in GCS: {gcs_result['error']}")
+                # Still add the song with Suno URL as fallback
+                stored_songs.append(song)
         
         # Store final results in Redis
         results_key = f"phase2_results:{session_id}"
@@ -327,10 +347,11 @@ def process_music_generation(self, session_id: str):
         }))
         
         # Trigger Phase 3 (Video Production) with actual song durations
-        redis_client.publish('phase2_completed', json.dumps({
+        phase3_data = {
             'session_id': session_id,
             'songs': [{'song_id': s['song_id'], 'duration': s['duration']} for s in stored_songs]
-        }))
+        }
+        redis_client.publish('phase2_completed', json.dumps(phase3_data))
         
         logger.info(f"Phase 2 completed for session {session_id} - Triggered Phase 3")
         return final_results
@@ -363,17 +384,20 @@ class RedisListener:
     
     def start_listening(self):
         """Start listening for Phase 1 completion events"""
-        self.pubsub.subscribe('phase1_completed')
-        logger.info("Redis listener started for Phase 1 completion events")
-        
-        for message in self.pubsub.listen():
-            if message['type'] == 'message':
-                session_id = message['data'].decode('utf-8')
-                logger.info(f"Received Phase 1 completion for session: {session_id}")
-                
-                # Trigger Phase 2 processing
-                process_music_generation.delay(session_id)
-                logger.info(f"Triggered Phase 2 processing for session: {session_id}")
+        try:
+            self.pubsub.subscribe('phase1_completed')
+            logger.info("Redis listener started for Phase 1 completion events")
+            
+            for message in self.pubsub.listen():
+                if message['type'] == 'message':
+                    session_id = message['data'].decode('utf-8')
+                    logger.info(f"Received Phase 1 completion for session: {session_id}")
+                    
+                    # Trigger Phase 2 processing
+                    process_music_generation.delay(session_id)
+                    logger.info(f"Triggered Phase 2 processing for session: {session_id}")
+        except Exception as e:
+            logger.error(f"Redis listener error: {e}")
 
 def run_redis_listener():
     """Run the Redis listener"""
