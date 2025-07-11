@@ -512,7 +512,31 @@ def get_phase3_status(session_id):
                 'success': False,
                 'error': 'Redis not available'
             }), 500
+
+@app.route('/api/suno/callback', methods=['POST'])
+def suno_callback():
+    """Handle Suno API callback when music generation is complete"""
+    try:
+        data = request.get_json()
+        logger.info(f"Received Suno callback: {data}")
         
+        # Extract session info from the callback data
+        task_id = data.get('taskId')
+        status = data.get('status')
+        
+        if status == 'complete' and task_id:
+            # Update Redis with completion status
+            if redis_client:
+                callback_key = f"suno_callback:{task_id}"
+                redis_client.setex(callback_key, 3600, json.dumps(data))
+                logger.info(f"Stored Suno callback for task: {task_id}")
+        
+        return jsonify({'success': True, 'message': 'Callback received'}), 200
+        
+    except Exception as e:
+        logger.error(f"Error handling Suno callback: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
         # Get status and progress from Redis hash
         session_key = f"session:{session_id}"
         status = redis_client.hget(session_key, "phase3_status")

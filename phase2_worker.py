@@ -157,6 +157,7 @@ class SunoService:
                 "wait_audio": True,
                 "customMode": False,  # Required parameter
                 "model": "V4_5",  # Required model parameter
+                "callBackUrl": f"https://{os.environ.get('RAILWAY_PUBLIC_DOMAIN')}/api/suno/callback",  # Add this line
             }
 
             logger.info(f"Generating music for session {session_id} with tags: {tags}")
@@ -242,8 +243,24 @@ class GCSService:
         self.bucket_name = os.environ.get("GCS_BUCKET_NAME")
         if self.bucket_name and GCS_AVAILABLE:
             try:
-                self.client = storage.Client()
+                # Check if we have JSON credentials in environment
+                creds_json = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS_JSON")
+                if creds_json:
+                    import json
+                    from google.oauth2 import service_account
+                    
+                    # Parse JSON credentials from environment variable
+                    credentials_info = json.loads(creds_json)
+                    credentials = service_account.Credentials.from_service_account_info(credentials_info)
+                    self.client = storage.Client(credentials=credentials)
+                    logger.info("GCS initialized with service account credentials")
+                else:
+                    # Fallback to default credentials
+                    self.client = storage.Client()
+                    logger.info("GCS initialized with default credentials")
+                
                 self.bucket = self.client.bucket(self.bucket_name)
+                logger.info(f"GCS bucket '{self.bucket_name}' connected successfully")
             except Exception as e:
                 logger.error(f"GCS initialization failed: {e}")
                 self.client = None
