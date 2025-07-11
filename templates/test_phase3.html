@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QMV - Phase 3 Video Generation Test</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+        .container {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        h1 {
+            text-align: center;
+            color: #4a5568;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+        }
+        .section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            background: #f8fafc;
+        }
+        .section h2 {
+            color: #2d3748;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #4a5568;
+        }
+        input, select, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .status {
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-weight: 600;
+        }
+        .status.processing {
+            background: #fef5e7;
+            border: 1px solid #f6ad55;
+            color: #c05621;
+        }
+        .status.completed {
+            background: #f0fff4;
+            border: 1px solid #68d391;
+            color: #22543d;
+        }
+        .status.failed {
+            background: #fed7d7;
+            border: 1px solid #fc8181;
+            color: #c53030;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #e2e8f0;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            transition: width 0.3s ease;
+        }
+        .results {
+            margin-top: 20px;
+        }
+        .video-item {
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 10px 0;
+        }
+        .video-item h4 {
+            margin: 0 0 10px 0;
+            color: #2d3748;
+        }
+        .video-link {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 8px 16px;
+            text-decoration: none;
+            border-radius: 5px;
+            margin-top: 10px;
+        }
+        .video-link:hover {
+            background: #5a67d8;
+        }
+        .json-display {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎬 Phase 3 Video Generation Test</h1>
+        
+        <div class="section">
+            <h2>Session Management</h2>
+            <div class="form-group">
+                <label for="sessionId">Session ID:</label>
+                <input type="text" id="sessionId" placeholder="Enter session ID from Phase 2">
+            </div>
+            <button onclick="checkSessionStatus()">Check Complete Session Status</button>
+            <button onclick="triggerPhase3()">Trigger Phase 3 Manually</button>
+        </div>
+
+        <div class="section">
+            <h2>Phase 3 Status</h2>
+            <div id="phase3Status">No status available</div>
+            <div class="progress-bar" style="display: none;" id="progressBar">
+                <div class="progress-fill" id="progressFill" style="width: 0%;"></div>
+            </div>
+            <button onclick="checkPhase3Status()">Refresh Phase 3 Status</button>
+        </div>
+
+        <div class="section">
+            <h2>Video Results</h2>
+            <div id="videoResults">No results available</div>
+            <button onclick="getVideoResults()">Get Video Results</button>
+        </div>
+
+        <div class="section">
+            <h2>Complete Session Overview</h2>
+            <div id="sessionOverview">No session data available</div>
+        </div>
+    </div>
+
+    <script>
+        let currentSessionId = '';
+        let statusCheckInterval = null;
+
+        function getSessionId() {
+            const sessionId = document.getElementById('sessionId').value.trim();
+            if (!sessionId) {
+                alert('Please enter a session ID');
+                return null;
+            }
+            currentSessionId = sessionId;
+            return sessionId;
+        }
+
+        async function checkSessionStatus() {
+            const sessionId = getSessionId();
+            if (!sessionId) return;
+
+            try {
+                const response = await fetch(`/api/session/${sessionId}/complete-status`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    displaySessionOverview(data);
+                } else {
+                    document.getElementById('sessionOverview').innerHTML = 
+                        `<div class="status failed">Error: ${data.error}</div>`;
+                }
+            } catch (error) {
+                document.getElementById('sessionOverview').innerHTML = 
+                    `<div class="status failed">Network error: ${error.message}</div>`;
+            }
+        }
+
+        async function triggerPhase3() {
+            const sessionId = getSessionId();
+            if (!sessionId) return;
+
+            try {
+                // First check if Phase 2 is completed
+                const phase2Response = await fetch(`/api/phase2/status/${sessionId}`);
+                const phase2Data = await phase2Response.json();
+                
+                if (!phase2Data.success || phase2Data.status.status !== 'completed') {
+                    alert('Phase 2 must be completed before triggering Phase 3');
+                    return;
+                }
+
+                // Trigger Phase 3 by making a request to start video generation
+                // Note: In a real implementation, this would be handled automatically
+                alert('Phase 3 should be triggered automatically after Phase 2 completion. Check the worker logs.');
+                
+                // Start monitoring Phase 3 status
+                startStatusMonitoring();
+                
+            } catch (error) {
+                alert(`Error: ${error.message}`);
+            }
+        }
+
+        async function checkPhase3Status() {
+            const sessionId = getSessionId();
+            if (!sessionId) return;
+
+            try {
+                const response = await fetch(`/api/phase3/status/${sessionId}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    displayPhase3Status(data);
+                } else {
+                    document.getElementById('phase3Status').innerHTML = 
+                        `<div class="status failed">Error: ${data.error}</div>`;
+                }
+            } catch (error) {
+                document.getElementById('phase3Status').innerHTML = 
+                    `<div class="status failed">Network error: ${error.message}</div>`;
+            }
+        }
+
+        async function getVideoResults() {
+            const sessionId = getSessionId();
+            if (!sessionId) return;
+
+            try {
+                const response = await fetch(`/api/phase3/results/${sessionId}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    displayVideoResults(data.results);
+                } else {
+                    document.getElementById('videoResults').innerHTML = 
+                        `<div class="status failed">Error: ${data.error}</div>`;
+                }
+            } catch (error) {
+                document.getElementById('videoResults').innerHTML = 
+                    `<div class="status failed">Network error: ${error.message}</div>`;
+            }
+        }
+
+        function displaySessionOverview(data) {
+            const overview = document.getElementById('sessionOverview');
+            let html = `<h3>Session: ${data.session_id}</h3>`;
+            
+            // Phase 1
+            html += `<div class="status ${data.phase1.completed ? 'completed' : 'failed'}">`;
+            html += `Phase 1 (Preferences): ${data.phase1.status}</div>`;
+            
+            // Phase 2
+            const phase2Status = data.phase2.status || 'not_started';
+            const phase2Class = phase2Status === 'completed' ? 'completed' : 
+                               phase2Status === 'processing' ? 'processing' : 'failed';
+            html += `<div class="status ${phase2Class}">`;
+            html += `Phase 2 (Music): ${phase2Status}</div>`;
+            
+            // Phase 3
+            const phase3Status = data.phase3.status || 'not_started';
+            const phase3Class = phase3Status === 'completed' ? 'completed' : 
+                               phase3Status === 'processing' ? 'processing' : 'failed';
+            html += `<div class="status ${phase3Class}">`;
+            html += `Phase 3 (Video): ${phase3Status} (${data.phase3.progress}%)</div>`;
+            
+            overview.innerHTML = html;
+        }
+
+        function displayPhase3Status(data) {
+            const statusDiv = document.getElementById('phase3Status');
+            const progressBar = document.getElementById('progressBar');
+            const progressFill = document.getElementById('progressFill');
+            
+            let statusClass = 'processing';
+            if (data.status === 'completed') statusClass = 'completed';
+            else if (data.status === 'failed') statusClass = 'failed';
+            
+            let html = `<div class="status ${statusClass}">`;
+            html += `Status: ${data.status}<br>`;
+            html += `Progress: ${data.progress}%`;
+            if (data.error) {
+                html += `<br>Error: ${data.error}`;
+            }
+            html += `</div>`;
+            
+            statusDiv.innerHTML = html;
+            
+            // Update progress bar
+            if (data.status === 'processing' || data.progress > 0) {
+                progressBar.style.display = 'block';
+                progressFill.style.width = `${data.progress}%`;
+            } else {
+                progressBar.style.display = 'none';
+            }
+            
+            // Auto-refresh if processing
+            if (data.status === 'processing' && !statusCheckInterval) {
+                startStatusMonitoring();
+            } else if (data.status !== 'processing' && statusCheckInterval) {
+                stopStatusMonitoring();
+            }
+        }
+
+        function displayVideoResults(results) {
+            const resultsDiv = document.getElementById('videoResults');
+            
+            if (!results.videos || results.videos.length === 0) {
+                resultsDiv.innerHTML = '<div class="status failed">No videos generated</div>';
+                return;
+            }
+            
+            let html = `<div class="status completed">Generated ${results.videos.length} videos</div>`;
+            
+            results.videos.forEach((video, index) => {
+                html += `<div class="video-item">`;
+                html += `<h4>Video ${index + 1} (${video.video_id})</h4>`;
+                html += `<p><strong>Duration:</strong> ${video.duration.toFixed(2)} seconds</p>`;
+                html += `<p><strong>Images Used:</strong> ${video.images_used}</p>`;
+                html += `<p><strong>Tempo:</strong> ${video.tempo.toFixed(1)} BPM</p>`;
+                html += `<p><strong>GCS Path:</strong> ${video.gcs_path}</p>`;
+                if (video.download_url) {
+                    html += `<a href="${video.download_url}" class="video-link" target="_blank">Download Video</a>`;
+                }
+                html += `</div>`;
+            });
+            
+            html += `<div class="json-display">${JSON.stringify(results, null, 2)}</div>`;
+            
+            resultsDiv.innerHTML = html;
+        }
+
+        function startStatusMonitoring() {
+            if (statusCheckInterval) return;
+            
+            statusCheckInterval = setInterval(() => {
+                checkPhase3Status();
+            }, 3000); // Check every 3 seconds
+        }
+
+        function stopStatusMonitoring() {
+            if (statusCheckInterval) {
+                clearInterval(statusCheckInterval);
+                statusCheckInterval = null;
+            }
+        }
+
+        // Auto-load session ID from URL if provided
+        window.addEventListener('load', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const sessionId = urlParams.get('session_id');
+            if (sessionId) {
+                document.getElementById('sessionId').value = sessionId;
+                currentSessionId = sessionId;
+                checkSessionStatus();
+            }
+        });
+
+        // Cleanup interval on page unload
+        window.addEventListener('beforeunload', () => {
+            stopStatusMonitoring();
+        });
+    </script>
+</body>
+</html>

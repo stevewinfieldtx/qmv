@@ -14,10 +14,11 @@ celery_app.conf.update(
     timezone='UTC',
     enable_utc=True,
     # Import tasks
-    imports=['phase2_worker'],
+    imports=['phase2_worker', 'phase3_worker'],
     # Task routing
     task_routes={
         'phase2_worker.process_music_generation': {'queue': 'music_generation'},
+        'phase3_worker.process_video_generation': {'queue': 'video_generation'},
     },
     # Worker settings
     worker_concurrency=2,

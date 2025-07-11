@@ -19,8 +19,8 @@ class GeminiService:
             
         try:
             genai.configure(api_key=self.api_key)
-            self.model = genai.GenerativeModel('gemini-pro')
-            logger.info("Gemini service initialized successfully")
+            self.model = genai.GenerativeModel('gemini-1.5-pro-002')
+            logger.info("Gemini service initialized with gemini-1.5-pro-002")
         except Exception as e:
             logger.error(f"Failed to initialize Gemini: {e}")
             self.model = None
@@ -303,6 +303,57 @@ class GeminiService:
             
         except Exception as e:
             logger.error(f"Error enhancing music prompt: {e}")
+            return {
+                'success': False,
+                'error': f'Gemini API error: {str(e)}'
+            }
+    
+    def enhance_image_prompt(self, user_input: str, preferences: Dict[str, Any]) -> Dict[str, Any]:
+        """Enhance user's image prompt with AI suggestions"""
+        try:
+            if not self.model:
+                return {
+                    'success': False, 
+                    'error': 'Gemini API not configured properly'
+                }
+                
+            music_prefs = preferences.get('music_preferences', {})
+            image_prefs = preferences.get('image_preferences', {})
+            
+            prompt = f"""
+            Create a realistic image prompt for AI image generation.
+            
+            User's idea: \"{user_input}\"
+            Music: {music_prefs.get('genre', 'pop')} - {music_prefs.get('mood', 'upbeat')}
+            Style: {image_prefs.get('visual_style', 'modern')}
+            Colors: {image_prefs.get('color_scheme', 'vibrant')}
+            
+            Create a realistic, specific image prompt under 1500 characters that describes something real and achievable.
+            """
+            
+            response = self.model.generate_content(prompt)
+            response_text = response.text
+            
+            # Extract the main enhanced prompt
+            enhanced_prompt = response_text.strip()
+            
+            # Generate alternative suggestions
+            alternatives = [
+                f"Focus on {image_prefs.get('visual_style', 'modern')} style: {user_input}",
+                f"Emphasize {image_prefs.get('color_scheme', 'vibrant')} colors: {user_input}",
+                f"Match {music_prefs.get('mood', 'upbeat')} mood: {user_input}"
+            ]
+            
+            return {
+                'success': True,
+                'enhanced_prompt': enhanced_prompt,
+                'alternatives': alternatives,
+                'original_prompt': user_input,
+                'character_count': len(enhanced_prompt)
+            }
+            
+        except Exception as e:
+            logger.error(f"Error enhancing image prompt: {e}")
             return {
                 'success': False,
                 'error': f'Gemini API error: {str(e)}'

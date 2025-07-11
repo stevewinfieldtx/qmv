@@ -260,14 +260,17 @@ class QuickMusicVideos {
 
             if (data.success) {
                 localStorage.setItem('sessionId', data.session_id);
-                alert('Preferences saved! Music generation started. You will receive 2 song variations.');
+                this.sessionId = data.session_id;
+                
+                // Start automatic music generation and monitoring
+                this.startMusicGeneration();
             } else {
                 alert('Error: ' + (data.errors || ['Unknown error']).join(', '));
+                this.hideLoading();
             }
 
         } catch (error) {
             alert('Network error. Please try again.');
-        } finally {
             this.hideLoading();
         }
     }
@@ -282,6 +285,108 @@ class QuickMusicVideos {
         this.loadingModal.classList.add('hidden');
         this.loadingModal.classList.remove('flex');
         this.submitBtn.disabled = false;
+    }
+
+    async startMusicGeneration() {
+        try {
+            // Update loading message
+            this.updateLoadingMessage('Starting music generation...');
+            
+            // Trigger direct music generation
+            const response = await fetch(`/api/generate-music/${this.sessionId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                // Since Redis is not available, results are returned immediately
+                this.updateLoadingMessage('Music generation completed! Loading results...');
+                this.displayMusicResults(data.result.songs);
+            } else {
+                alert('Error starting music generation: ' + data.error);
+                this.hideLoading();
+            }
+        } catch (error) {
+            alert('Network error during music generation: ' + error.message);
+            this.hideLoading();
+        }
+    }
+
+    // Status monitoring methods removed since we get results immediately without Redis
+
+    displayMusicResults(songs) {
+        // Hide loading modal first
+        this.hideLoading();
+        
+        // Check if songs exist
+        if (!songs || songs.length === 0) {
+            alert('No music was generated. Please try again.');
+            return;
+        }
+        
+        // Create results modal
+        const resultsModal = document.createElement('div');
+        resultsModal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+        resultsModal.innerHTML = `
+            <div class="bg-white p-8 rounded-lg max-w-4xl w-full mx-4 max-h-96 overflow-y-auto">
+                <h2 class="text-2xl font-bold mb-6 text-center">🎵 Your Music is Ready!</h2>
+                <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
+                    <p class="text-sm">✅ Your music files have been saved and are ready for download!</p>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    ${songs.map((song, index) => `
+                        <div class="border rounded-lg p-4">
+                            <h3 class="font-semibold text-lg mb-2">${song.title || `Song ${index + 1}`}</h3>
+                            <p class="text-sm text-gray-600 mb-3">${song.tags || 'No tags'}</p>
+                            ${song.duration ? `<p class="text-xs text-gray-500 mb-2">Duration: ${song.duration}s</p>` : ''}
+                            ${song.file_size ? `<p class="text-xs text-gray-500 mb-3">Size: ${Math.round(song.file_size / 1024 / 1024 * 100) / 100} MB</p>` : ''}
+                            ${song.audio_url ? `
+                                <audio controls class="w-full mb-3">
+                                    <source src="${song.audio_url}" type="audio/mpeg">
+                                    Your browser does not support the audio element.
+                                </audio>
+                            ` : ''}
+                            <div class="flex gap-2">
+                                ${song.download_url ? `
+                                    <a href="${song.download_url}" download="${song.title || `Song_${index + 1}`}.mp3" 
+                                       class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 text-sm flex items-center gap-1">
+                                        📥 Download Your Copy
+                                    </a>
+                                ` : `
+                                    <a href="${song.audio_url}" download="${song.title || `Song_${index + 1}`}.mp3" 
+                                       class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm flex items-center gap-1">
+                                        📥 Download MP3
+                                    </a>
+                                `}
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+                <div class="text-center mt-6">
+                    <button onclick="this.showDownloadCenter()" 
+                            class="bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700 mr-3">
+                        📁 Download Center
+                    </button>
+                    <button onclick="this.parentElement.parentElement.parentElement.remove()" 
+                            class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700">
+                        Close
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(resultsModal);
+    }
+
+    updateLoadingMessage(message) {
+        const loadingText = this.loadingModal.querySelector('p');
+        if (loadingText) {
+            loadingText.textContent = message;
+        }
     }
 }
 

@@ -19,5 +19,5 @@ if __name__ == '__main__':
         'worker',
         '--loglevel=info',
         '--concurrency=2',
-        '--queues=music_generation,celery'
+        '--queues=music_generation,video_generation,celery'
     ])
