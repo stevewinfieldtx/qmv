@@ -12,7 +12,6 @@ from celery_app import celery_app
 # Optional Google Cloud Storage import
 try:
     from google.cloud import storage
-
     GCS_AVAILABLE = True
 except ImportError:
     storage = None
@@ -26,6 +25,81 @@ logger = logging.getLogger(__name__)
 # Redis connection
 redis_client = redis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379"))
 
+from services.lyria_service import LyriaService
+
+class MusicGenerationService:
+    """Unified service for music generation using multiple providers"""
+    
+    def __init__(self):
+        self.use_lyria = os.environ.get('USE_LYRIA', 'true').lower() == 'true'
+        self.lyria_service = LyriaService() if self.use_lyria else None
+        self.suno_service = SunoService()
+        
+    def generate_music(self, preferences: Dict[str, Any], session_id: str) -> Dict[str, Any]:
+        """Generate music using the preferred service"""
+        try:
+            # Try Lyria first if enabled
+            if self.use_lyria and self.lyria_service and self.lyria_service.credentials:
+                logger.info(f"Using Lyria for music generation for session {session_id}")
+                return self._generate_with_lyria(preferences, session_id)
+            else:
+                # Fallback to Suno
+                logger.info(f"Using Suno for music generation for session {session_id}")
+                return self.suno_service.generate_music(preferences, session_id)
+                
+        except Exception as e:
+            logger.error(f"Music generation failed: {e}")
+            # If Lyria fails, try Suno as backup
+            if self.use_lyria:
+                logger.info("Lyria failed, trying Suno as backup")
+                return self.suno_service.generate_music(preferences, session_id)
+            else:
+                return {
+                    'success': False,
+                    'error': f'Music generation failed: {str(e)}'
+                }
+    
+    def _generate_with_lyria(self, preferences: Dict[str, Any], session_id: str) -> Dict[str, Any]:
+        """Generate music using Lyria service"""
+        try:
+            music_prefs = preferences.get('music_preferences', {})
+            
+            # Get or create music prompt
+            user_prompt = music_prefs.get('music_prompt', '')
+            
+            # Enhance prompt for Lyria
+            enhanced_prompt = self.lyria_service.enhance_prompt_for_lyria(user_prompt, preferences)
+            
+            # Generate music with Lyria
+            result = self.lyria_service.generate_music(enhanced_prompt, session_id)
+            
+            if result['success']:
+                # Save the audio file
+                audio_file_path = self.lyria_service.save_audio_file(
+                    result['audio_data'], 
+                    session_id
+                )
+                
+                # Return result in expected format
+                return {
+                    'success': True,
+                    'music_url': audio_file_path,
+                    'audio_file_path': audio_file_path,
+                    'duration': 30,
+                    'format': 'wav',
+                    'service': 'lyria',
+                    'prompt': enhanced_prompt,
+                    'session_id': session_id
+                }
+            else:
+                return result
+                
+        except Exception as e:
+            logger.error(f"Lyria generation failed: {e}")
+            return {
+                'success': False,
+                'error': f'Lyria generation failed: {str(e)}'
+            }
 
 class SunoService:
     """Service for generating music using Suno API"""
@@ -129,6 +203,53 @@ class SunoService:
         logger.warning(f"Polling timeout after {max_attempts} attempts")
         return []
 
+    def check_callback_results(
+        self, task_id: str, timeout: int = 300
+    ) -> List[Dict[str, Any]]:
+        """Check for callback results before polling"""
+        import time
+
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            try:
+                # Check if callback data is available
+                callback_key = f"suno_callback:{task_id}"
+                callback_data = redis_client.get(callback_key)
+
+                if callback_data:
+                    data = json.loads(callback_data)
+                    logger.info(f"Found callback data for task {task_id}: {data}")
+
+                    if data.get("status") == "complete":
+                        # Get the actual song data using the task ID
+                        response = self.session.get(
+                            f"{self.base_url}/api/v1/generate/record-info?taskId={task_id}"
+                        )
+                        if response.status_code == 200:
+                            result = response.json()
+                            if result.get("code") == 200 and "data" in result:
+                                clips = result["data"]
+                                if clips and len(clips) > 0:
+                                    ready_songs = [
+                                        song for song in clips if song.get("audio_url")
+                                    ]
+                                    if ready_songs:
+                                        logger.info(
+                                            f"Retrieved {len(ready_songs)} songs from callback"
+                                        )
+                                        return ready_songs
+
+                time.sleep(5)  # Check every 5 seconds
+
+            except Exception as e:
+                logger.error(f"Error checking callback: {e}")
+                time.sleep(5)
+
+        logger.warning(
+            f"No callback received for task {task_id} within {timeout} seconds"
+        )
+        return []
+
     def generate_music(
         self, preferences: Dict[str, Any], session_id: str
     ) -> Dict[str, Any]:
@@ -154,10 +275,10 @@ class SunoService:
                 "tags": tags,
                 "title": general_prefs.get("project_name", "Untitled"),
                 "instrumental": music_prefs.get("vocal_style", "none") == "none",
-                "wait_audio": True,
-                "customMode": False,  # Required parameter
-                "model": "V4_5",  # Required model parameter
-                "callBackUrl": f"https://{os.environ.get('RAILWAY_PUBLIC_DOMAIN')}/api/suno/callback",  # Add this line
+                "wait_audio": False,  # Changed to False to use callback
+                "customMode": False,
+                "model": "V4_5",
+                "callBackUrl": f"https://{os.environ.get('RAILWAY_PUBLIC_DOMAIN')}/api/suno/callback",
             }
 
             logger.info(f"Generating music for session {session_id} with tags: {tags}")
@@ -169,22 +290,34 @@ class SunoService:
             )
 
             logger.info(f"Suno API response status: {response.status_code}")
-            logger.info(
-                f"Suno API response text: {response.text[:500]}..."
-            )  # Log first 500 chars
+            logger.info(f"Suno API response text: {response.text[:500]}...")
 
             if response.status_code == 200:
-                suno_response = response.json()
-                logger.info(f"Suno API response JSON: {suno_response}")
+                try:
+                    suno_response = response.json()
+                    logger.info(f"Suno API response JSON: {suno_response}")
+                except json.JSONDecodeError as e:
+                    logger.error(f"Failed to parse JSON response: {e}")
+                    logger.error(f"Response content: {response.text}")
+                    return {
+                        "success": False,
+                        "error": f"Invalid JSON response: {response.text[:200]}",
+                    }
 
-                # Check if we got a taskId (async response) or direct clips
+                # Check if we got a taskId (async response)
                 if "data" in suno_response and "taskId" in suno_response["data"]:
                     task_id = suno_response["data"]["taskId"]
-                    logger.info(f"Got taskId: {task_id}, polling for results...")
+                    logger.info(f"Got taskId: {taskId}, waiting for callback...")
 
-                    # Poll for results
-                    songs = self.poll_for_results(task_id)
-                    logger.info(f"Found {len(songs)} songs after polling")
+                    # First check for callback results (preferred method)
+                    songs = self.check_callback_results(task_id, timeout=300)
+
+                    # If no callback received, fall back to polling
+                    if not songs:
+                        logger.info("No callback received, falling back to polling...")
+                        songs = self.poll_for_results(task_id)
+
+                    logger.info(f"Found {len(songs)} songs total")
                 else:
                     # Direct response with clips
                     songs = suno_response.get("clips", [])
@@ -196,9 +329,7 @@ class SunoService:
                         "song_id": song.get("id"),
                         "title": song.get("title", f"Song {i+1}"),
                         "audio_url": song.get("audio_url"),
-                        "duration": song.get(
-                            "duration"
-                        ),  # Actual song duration from Suno
+                        "duration": song.get("duration"),
                         "tags": song.get("tags", tags),
                         "prompt": song.get("prompt", music_prompt),
                         "status": song.get("status", "complete"),
@@ -248,17 +379,19 @@ class GCSService:
                 if creds_json:
                     import json
                     from google.oauth2 import service_account
-                    
+
                     # Parse JSON credentials from environment variable
                     credentials_info = json.loads(creds_json)
-                    credentials = service_account.Credentials.from_service_account_info(credentials_info)
+                    credentials = service_account.Credentials.from_service_account_info(
+                        credentials_info
+                    )
                     self.client = storage.Client(credentials=credentials)
                     logger.info("GCS initialized with service account credentials")
                 else:
                     # Fallback to default credentials
                     self.client = storage.Client()
                     logger.info("GCS initialized with default credentials")
-                
+
                 self.bucket = self.client.bucket(self.bucket_name)
                 logger.info(f"GCS bucket '{self.bucket_name}' connected successfully")
             except Exception as e:
@@ -471,32 +604,19 @@ def process_music_generation(self, session_id: str):
         redis_client.hset(
             f"session:{session_id}",
             "phase2_results",
-            json.dumps(
-                {
-                    "music_files": [
-                        {
-                            "song_id": s["song_id"],
-                            "gcs_path": s.get("filename", ""),
-                            "duration": s["duration"],
-                            "public_url": s.get("public_url", ""),
-                        }
-                        for s in stored_songs
-                    ]
-                }
-            ),
+            json.dumps(final_results)
         )
 
-        # Trigger Phase 3 (Video Generation)
+        # Trigger Phase 3 (video generation)
         from phase3_worker import process_video_generation
-
         process_video_generation.delay(session_id)
 
-        logger.info(f"Phase 2 completed for session {session_id} - Triggered Phase 3")
+        logger.info(f"Phase 2 completed for session {session_id}")
         return final_results
 
     except Exception as e:
         logger.error(f"Error in music generation task: {e}")
-
+        
         # Update status to failed
         status_key = f"phase2_status:{session_id}"
         redis_client.setex(
@@ -511,51 +631,10 @@ def process_music_generation(self, session_id: str):
                 }
             ),
         )
-
-        # Retry logic
+        
+        # Retry the task
         if self.request.retries < self.max_retries:
-            logger.info(
-                f"Retrying task for session {session_id} (attempt {self.request.retries + 1})"
-            )
-            raise self.retry(countdown=60 * (self.request.retries + 1))
-
+            logger.info(f"Retrying task in {self.default_retry_delay} seconds...")
+            raise self.retry(countdown=self.default_retry_delay)
+        
         return {"success": False, "error": str(e)}
-
-
-class RedisListener:
-    """Redis listener to trigger Phase 2 when Phase 1 completes"""
-
-    def __init__(self):
-        self.redis_client = redis_client
-        self.pubsub = self.redis_client.pubsub()
-
-    def start_listening(self):
-        """Start listening for Phase 1 completion events"""
-        try:
-            self.pubsub.subscribe("phase1_completed")
-            logger.info("Redis listener started for Phase 1 completion events")
-
-            for message in self.pubsub.listen():
-                if message["type"] == "message":
-                    session_id = message["data"].decode("utf-8")
-                    logger.info(
-                        f"Received Phase 1 completion for session: {session_id}"
-                    )
-
-                    # Trigger Phase 2 processing
-                    process_music_generation.delay(session_id)
-                    logger.info(
-                        f"Triggered Phase 2 processing for session: {session_id}"
-                    )
-        except Exception as e:
-            logger.error(f"Redis listener error: {e}")
-
-
-def run_redis_listener():
-    """Run the Redis listener"""
-    listener = RedisListener()
-    listener.start_listening()
-
-
-if __name__ == "__main__":
-    run_redis_listener()

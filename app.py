@@ -350,7 +350,7 @@ def generate_music_direct(session_id):
     """Direct music generation endpoint (bypasses Redis)"""
     try:
         # Import here to avoid circular imports
-        from phase2_worker import SunoService
+        from phase2_worker import MusicGenerationService
         
         # Get preferences
         preferences = None
@@ -365,56 +365,19 @@ def generate_music_direct(session_id):
                 'error': 'Session not found - please submit preferences first'
             }), 404
         
-        # Initialize Suno service and generate music
-        suno_service = SunoService()
-        result = suno_service.generate_music(preferences, session_id)
-        
-        # Download and store audio files for customer ownership
-        if result.get('success') and result.get('songs'):
-            from phase2_worker import GCSService
-            gcs_service = GCSService()
-            
-            for i, song in enumerate(result['songs']):
-                if song.get('audio_url'):
-                    # Download and store the audio file
-                    storage_result = gcs_service.upload_audio_file(
-                        song['audio_url'], 
-                        session_id, 
-                        i, 
-                        song['song_id']
-                    )
-                    
-                    if storage_result.get('success'):
-                        # Update song data with download info
-                        song['download_url'] = storage_result['public_url']
-                        song['file_size'] = storage_result['file_size']
-                        song['stored_filename'] = storage_result['filename']
-                        logger.info(f"Stored song {song['song_id']} for customer download")
-                    else:
-                        logger.warning(f"Failed to store song {song['song_id']}: {storage_result.get('error')}")
-            
-            # Store Phase 2 results in Redis for Phase 3
-            if redis_client:
-                redis_client.hset(f"session:{session_id}", "phase2_results", json.dumps(result))
-                logger.info(f"Stored Phase 2 results for session {session_id}")
-                
-                # Automatically trigger Phase 3 video generation
-                try:
-                    from phase3_worker import process_video_generation
-                    process_video_generation.delay(session_id)
-                    logger.info(f"Phase 3 video generation triggered for session {session_id}")
-                except Exception as e:
-                    logger.error(f"Failed to trigger Phase 3 for session {session_id}: {e}")
+        # Use unified music generation service
+        music_service = MusicGenerationService()
+        result = music_service.generate_music(preferences, session_id)
         
         # Store results in session if Redis not available
         if not redis_client:
             session[f'music_results_{session_id}'] = result
+        else:
+            # Store in Redis
+            results_key = f"phase2_results:{session_id}"
+            redis_client.setex(results_key, 3600, json.dumps(result))
         
-        return jsonify({
-            'success': True,
-            'result': result,
-            'message': 'Music generation completed'
-        })
+        return jsonify(result)
         
     except Exception as e:
         logger.error(f"Error in direct music generation: {e}")
@@ -513,30 +476,6 @@ def get_phase3_status(session_id):
                 'error': 'Redis not available'
             }), 500
 
-@app.route('/api/suno/callback', methods=['POST'])
-def suno_callback():
-    """Handle Suno API callback when music generation is complete"""
-    try:
-        data = request.get_json()
-        logger.info(f"Received Suno callback: {data}")
-        
-        # Extract session info from the callback data
-        task_id = data.get('taskId')
-        status = data.get('status')
-        
-        if status == 'complete' and task_id:
-            # Update Redis with completion status
-            if redis_client:
-                callback_key = f"suno_callback:{task_id}"
-                redis_client.setex(callback_key, 3600, json.dumps(data))
-                logger.info(f"Stored Suno callback for task: {task_id}")
-        
-        return jsonify({'success': True, 'message': 'Callback received'}), 200
-        
-    except Exception as e:
-        logger.error(f"Error handling Suno callback: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
-
         # Get status and progress from Redis hash
         session_key = f"session:{session_id}"
         status = redis_client.hget(session_key, "phase3_status")
@@ -567,6 +506,30 @@ def suno_callback():
             'success': False,
             'error': 'Internal server error'
         }), 500
+
+@app.route('/api/suno/callback', methods=['POST'])
+def suno_callback():
+    """Handle Suno API callback when music generation is complete"""
+    try:
+        data = request.get_json()
+        logger.info(f"Received Suno callback: {data}")
+        
+        # Extract session info from the callback data
+        task_id = data.get('taskId')
+        status = data.get('status')
+        
+        if status == 'complete' and task_id:
+            # Update Redis with completion status
+            if redis_client:
+                callback_key = f"suno_callback:{task_id}"
+                redis_client.setex(callback_key, 3600, json.dumps(data))
+                logger.info(f"Stored Suno callback for task: {task_id}")
+        
+        return jsonify({'success': True, 'message': 'Callback received'}), 200
+        
+    except Exception as e:
+        logger.error(f"Error handling Suno callback: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/phase3/results/<session_id>', methods=['GET'])
 def get_phase3_results(session_id):
